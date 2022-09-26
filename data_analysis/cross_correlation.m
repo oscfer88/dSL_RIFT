@@ -1,57 +1,78 @@
 %-------------------------------------------------------------------------------
 % Function
 %-------------------------------------------------------------------------------
-function cross_correlation(X, y, nTrials)
+function [XDL, XDR, pDelays] = cross_correlation(X, DL, DR, tTrialBeg, tTrialEnd)
+
+% trial info
+%tTrialBeg = -0.2;
+%tTrialEnd = 1.7;
+bCAT = 1; % concatenate over trils (1, default) or not (0)
+
+nSamples = size(X, 2);
+nTrials = size(X, 3);
+t = linspace(tTrialBeg, tTrialEnd, nSamples);
+iTrialBeg = find(t >= 0, 1);
 
 % MEG % tagging parameters
 fs = 1000; % sampling rate
-fl = 55; % low tagging freqeuncy
-fh = 75; % high tagging freqeuncy
+lSegment = 1.5 * fs; % segment for correlation (in seconds)
+fl = 45; % low tagging frequency
+fh = 85; % high tagging frequency
 
-% filter data and tagging signal
+% set delay range
+pDelays = -200:200;
+nDelays = length(pDelays);
+
+DL = squeeze(DL);
+DR = squeeze(DR);
+
+% filter data 
 for iTrial = 1:nTrials
-  X(:, :, iTrial) = apply_filter(X(:, :, iTrial), fl, fh, fs);
-  y(:, :, iTrial) = apply_filter(y(:, :, iTrial), fl, fh, fs);
-  y(:, :, iTrial) = y(:, :, iTrial) ./ abs(hilbert(y(:, :, iTrial)')');
+  y = X(:, :, iTrial); y = apply_filter(y, fl, fh, fs); X(:, :, iTrial) = y; 
 end
 
-% concatenate over trials
-X = reshape(X, size(X, 1), []);
-y = reshape(y, size(y, 1), []);
+% filter tagging signal 
+y = apply_filter(DL', fl, fh, fs); DL = y'; 
+y = apply_filter(DR', fl, fh, fs); DR = y';
 
-% cross-correlation
-pDelays = -200:1:200;
-A = get_peak_delay(X', y', pDelays);
+% flatten data
+if bCAT == 1 
+  X = X(:, iTrialBeg:(iTrialBeg + lSegment - 1), :);
+  DL = DL(iTrialBeg:(iTrialBeg + lSegment - 1), :);
+  DR = DR(iTrialBeg:(iTrialBeg + lSegment - 1), :);
+  X = reshape(X, size(X, 1), []);
+  DL = DL(:);
+  DR = DR(:);
+  lSegment = length(DL) - 2 * length(pDelays);
+end
 
-% plot
-plot(pDelays, A); xlabel('delays'); ylabel('correlation'); legend('MEG1922','MEG1923','MEG2032','MEG2033','MEG2042','MEG2043','MEG2112','MEG2113','MEG2122','MEG2123','MEG2342','MEG2343');
-figure; plot(pDelays, abs(hilbert(A'))); xlabel('delays'); ylabel('correlation'); legend('MEG1923','MEG1922','MEG2032','MEG2033','MEG2042','MEG2043','MEG2113','MEG2112','MEG2122','MEG2123','MEG2343','MEG2342');
+% compute xcorr
+nChannels = size(X, 1);
+nTrials = size(X, 3);
 
-end % end
+% init
+XDL = zeros(nChannels, nDelays, nTrials); 
+XDR = zeros(nChannels, nDelays, nTrials); 
 
-%-------------------------------------------------------------------------------
-% Function
-%-------------------------------------------------------------------------------
-function A = get_peak_delay(X, y, pDelays)
-
-% autocorrelation
-nChannels = size(X, 2);
-L = length(pDelays);
-A = zeros(nChannels, L);
-for i = 1:length(pDelays)
-  p = pDelays(i);
-  if p == 0
-    p = 1;
+% over trials
+iBeg = find(t >= 0, 1);
+% if bCAT == 1
+%     iBeg = 1;
+% end
+iEnd = iBeg + lSegment - 1;
+for iTrial = 1:nTrials
+  yDL = DL(iBeg:iEnd, iTrial);
+  yDR = DR(iBeg:iEnd, iTrial);
+  yDL = repmat(yDL', nChannels, 1);
+  yDR = repmat(yDR', nChannels, 1);
+  % over delays
+  for iDelay = 1:nDelays
+    fprintf(1, '%d/%d | %d/%d\n', iTrial, nTrials, iDelay, nDelays);
+    d = pDelays(iDelay);
+    yX = X(:, (iBeg + d):(iEnd + d), iTrial);
+    XDL(:, iDelay, iTrial) = diag(corr(yX', yDL'));
+    XDR(:, iDelay, iTrial) = diag(corr(yX', yDR')); 
   end
-  if p > 0
-    u = [y(p:end); y(1:(p - 1))];
-  else
-    u = [y((end + p + 1):end); y(1:(end + p))];
-  end
-  U = repmat(u, 1, nChannels);
-  % COR
-  t = diag(corr(X, U));
-  A(:, i) = t;
 end
 
 end % end
