@@ -13,8 +13,8 @@ Visual attention is highly influenced by past experiences. Recent behavioral res
 The visual search task. Each trial started with a fixation dot. Afterwards, a placeholder screen with four Gabor patches was displayed. Then the search array was presented, and participants had to report whether the target was tilted to the left or right. In 66% of the trial, the target was presented together with a color-singleton distractor. During the whole RIFT periods, the two stimuli at the bottom were showed flickering at a broadband signal (RIFT). Statistical learning manipulation. The distractor was presented more often in one hemifield (75%) than the other (25%). To counterbalance the distractor probability conditions across the two hemifields, each participant took part in two experimental sessions (indicated as Day 1 and Day 2), with the statistical learning manipulation swapped after the first session.
 <br /><br />
 
-## Rapid Invisible FRequency Tagging
-<img src="https://github.com/oscfer88/dSL_RIFT/blob/main/_pics/02%20freq_tagging.png?raw=true" width=66% height=66%>
+## Rapid Invisible Frequency Tagging
+<img src="https://github.com/oscfer88/dSL_RIFT/blob/main/_pics/02%20freq_tagging.png?raw=true" width=80% height=80%>
 <br />
 During the frequency tagging period, the two stimuli at the bottom of the screen (indicated by the dotted orange and blue circles) were flickered at very high frequencies (> 50 Hz) to generate a steady-state response in visual cortex. Examples of two uncorrelated (i.e., left and right stimulation signals) broadband tagging signals are shown in the figure above, as well as the power spectra of the broadband tagging signals used in this study.
 <br /><br />
