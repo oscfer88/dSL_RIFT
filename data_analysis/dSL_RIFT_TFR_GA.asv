@@ -1,0 +1,2019 @@
+%% Aplha-power analysis
+
+clear
+ft_defaults
+
+% set params
+selsensors      = 'occ';
+
+% select files
+folder = 'Q:/MEG_data/';
+filelist = dir(fullfile(folder, '**', 'tfr_all3.mat'));
+
+filelistHiLo = filelist([1 5 3 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition
+filelistLoHi = filelist([7 2 6 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition
+
+% load data
+nsubj = size(filelistHiLo,1);
+tfr_dataHiLo = cell(nsubj,1);
+tfr_dataLoHi = cell(nsubj,1);
+for i = 1:nsubj
+    tfr_tempHiLo = load([filelistHiLo(i).folder '\' filelistHiLo(i).name]);
+    tfr_dataHiLo{i} = tfr_tempHiLo.tfr_all;
+    tfr_tempLoHi = load([filelistLoHi(i).folder '\' filelistLoHi(i).name]);
+    tfr_dataLoHi{i} = tfr_tempLoHi.tfr_all;
+end
+tfr_dataHiLo_raw = tfr_dataHiLo; %tfr_dataHiLo = tfr_dataHiLo_raw;
+tfr_dataLoHi_raw = tfr_dataLoHi; %tfr_dataLoHi = tfr_dataLoHi_raw;
+
+% baseline correction
+cfg               = [];
+cfg.baseline      = [-1 -0.5];
+cfg.baselinetype  = 'relative'; %NOTE: use 'relchange' in the future
+for i = 1:nsubj
+    tfr_dataHiLo{i} = ft_freqbaseline(cfg, tfr_dataHiLo{i});
+    tfr_dataLoHi{i} = ft_freqbaseline(cfg, tfr_dataLoHi{i});
+end
+
+% combine sensors
+cfg                 = [];
+cfg.method          = 'sum';
+for i = 1:nsubj
+    tfr_dataHiLo{i} = ft_combineplanar(cfg,tfr_dataHiLo{i}); %ft_combineplanar_nocheck
+    tfr_dataLoHi{i} = ft_combineplanar(cfg,tfr_dataLoHi{i});
+end
+
+% difference
+tfr_data_dif = cell(nsubj,1);
+cfg = [];
+cfg.operation = 'subtract';
+cfg.parameter = 'powspctrm';
+for i = 1:nsubj
+    tfr_dataDiff{i} = ft_math(cfg,tfr_dataHiLo{i},tfr_dataLoHi{i});
+end
+
+% grand average
+cfg                 = [];
+tfr_dataHiLo_split = ft_freqgrandaverage(cfg, tfr_dataHiLo{:});
+tfr_dataLoHi_split = ft_freqgrandaverage(cfg, tfr_dataLoHi{:});
+tfr_dataDiff_ga = ft_freqgrandaverage(cfg, tfr_dataDiff{:});
+
+
+% topoplots
+plotmarkers = 1;
+cfg                 = []; %plot topography of alpha (8-12 HZ)
+cfg.xlim            = [0 1.5];
+cfg.ylim            = [8 12];
+cfg.zlim            = [.5  3];
+cfg.layout  = 'neuromag306cmb.lay';
+if plotmarkers
+    left_sensors  = [121 122 139 140 123 124 127 128 129 130 141 142 143 144 145 146 147 148 155 156];
+    right_sensors = [169 170 187 188 185 186 191 192 189 190 173 174 179 180 177 178 175 176 153 154];
+    left_sensors = left_sensors([2:2:numel(left_sensors)])/2;
+    right_sensors = right_sensors([2:2:numel(right_sensors)])/2;
+
+    cfg.highlight           = 'on';
+    cfg.highlightchannel    = [left_sensors, right_sensors];
+    cfg.highlightsize       = 10;
+end
+figure; ft_topoplotTFR(cfg, tfr_dataHiLo_split); title('High-Low');
+colormap jet
+
+figure; ft_topoplotTFR(cfg, tfr_dataLoHi_split); title('Low-High');
+colormap jet
+
+cfg.zlim            = [-.15 .15];
+figure; ft_topoplotTFR(cfg, tfr_dataDiff_ga); title('Difference');
+colormap jet
+
+
+% average over frequency band, time window and selected sensors
+tfr_dataHiLo_leftpost = cell(nsubj,1);
+tfr_dataHiLo_rightpost = cell(nsubj,1);
+tfr_dataLoHi_leftpost = cell(nsubj,1);
+tfr_dataLoHi_rightpost = cell(nsubj,1);
+if strcmp(selsensors, 'occ')
+    left_sensors  = [121 122 139 140 123 124 127 128 129 130 141 142 143 144 145 146 147 148 155 156];
+    right_sensors = [169 170 187 188 185 186 191 192 189 190 173 174 179 180 177 178 175 176 153 154];
+else
+    left_sensors  = [15 16 13 14 31 32 117 118 119 120 133 134 123 124 121 122 139 140];
+    right_sensors = [97 98 99 100 81 82 183 184 181 182 167 168 185 186 187 188 169 170];
+end
+if strcmp(combineplanar, 'yes')
+    left_sensors = left_sensors([2:2:numel(left_sensors)])/2;
+    right_sensors = right_sensors([2:2:numel(right_sensors)])/2;
+end
+cfg                 = [];
+cfg.frequency       = [8 12];   %alpha
+cfg.avgoverfreq     = 'yes';
+cfg.latency         = [0 1.5];  %pre-search array time window
+cfg.avgovertime     = 'yes';
+cfg.channel         = left_sensors;
+cfg.avgoverchan     = 'yes';
+for i = 1:nsubj
+    tfr_dataHiLo_leftpost{i} = ft_selectdata(cfg, tfr_dataHiLo{i});
+    tfr_dataLoHi_leftpost{i} = ft_selectdata(cfg, tfr_dataLoHi{i});
+end
+cfg.channel         = right_sensors;
+for i = 1:nsubj
+    tfr_dataHiLo_rightpost{i} = ft_selectdata(cfg, tfr_dataHiLo{i});
+    tfr_dataLoHi_rightpost{i} = ft_selectdata(cfg, tfr_dataLoHi{i});
+end
+
+% individual average
+HiLo_leftpost_sbj = nan(nsubj,1);
+LoHi_leftpost_sbj = nan(nsubj,1);
+HiLo_rightpost_sbj = nan(nsubj,1);
+LoHi_rightpost_sbj = nan(nsubj,1);
+for i = 1:nsubj
+    HiLo_leftpost_sbj(i) = tfr_dataHiLo_leftpost{i}.powspctrm;
+    LoHi_leftpost_sbj(i) = tfr_dataLoHi_leftpost{i}.powspctrm;
+    HiLo_rightpost_sbj(i) = tfr_dataHiLo_rightpost{i}.powspctrm;
+    LoHi_rightpost_sbj(i) = tfr_dataLoHi_rightpost{i}.powspctrm;
+end
+
+% grand average
+cfg         = [];
+tfr_dataHiLo_leftpost_ga = ft_freqgrandaverage(cfg, tfr_dataHiLo_leftpost{:});
+HiLo_leftpost_ga = tfr_dataHiLo_leftpost_ga.powspctrm; clearvars tfr_dataHiLo_leftpost_ga;
+tfr_dataLoHi_leftpost_ga = ft_freqgrandaverage(cfg, tfr_dataLoHi_leftpost{:});
+LoHi_leftpost_ga = tfr_dataLoHi_leftpost_ga.powspctrm; clearvars tfr_dataLoHi_leftpost_ga;
+tfr_dataHiLo_rightpost_ga = ft_freqgrandaverage(cfg, tfr_dataHiLo_rightpost{:});
+HiLo_rightpost_ga = tfr_dataHiLo_rightpost_ga.powspctrm; clearvars tfr_dataHiLo_rightpost_ga;
+tfr_dataLoHi_rightpost_ga = ft_freqgrandaverage(cfg, tfr_dataLoHi_rightpost{:});
+LoHi_rightpost_ga = tfr_dataLoHi_rightpost_ga.powspctrm; clearvars tfr_dataLoHi_rightpost_ga;
+
+
+
+% Plot for Fig. 5 of the paper [part 1]
+addpath(['...\Violinplot'])
+% plot alpha power by condition (hemi x probability)
+f1 = figure('Units', 'centimeters', 'Position', [5,5,8,8]);
+subplot(221)
+vp = violinplot([HiLo_rightpost_sbj, LoHi_rightpost_sbj, LoHi_leftpost_sbj, HiLo_leftpost_sbj], [], 'ShowMean', true);
+xlim([0.5,4.5]); xlabel('Distractor probability'); xticklabels({'high', 'low', 'high', 'low'});
+ylim([0.4 2.1]); ylabel('Alpha power');
+legend('left','right','FontSize',6); legend boxoff
+ax = gca;
+ax.FontSize = 6;
+vp(1, 1).ViolinColor = [0.3010    0.7450    0.9330];
+vp(1, 2).ViolinColor = [0.3010    0.7450    0.9330];
+vp(1, 3).ViolinColor = [0.8500    0.3250    0.0980];
+vp(1, 4).ViolinColor = [0.8500    0.3250    0.0980];
+% plot line between each subject data point
+x1 = vp(1,1).ScatterPlot.XData;
+y1 = vp(1,1).ScatterPlot.YData;
+x2 = vp(1,2).ScatterPlot.XData;
+y2 = vp(1,2).ScatterPlot.YData;
+plot([x1; x2],[y1; y2],'Color',[.8 .8 .8],'linewidth',0.5)
+x3 = vp(1,3).ScatterPlot.XData;
+y3 = vp(1,3).ScatterPlot.YData;
+x4 = vp(1,4).ScatterPlot.XData;
+y4 = vp(1,4).ScatterPlot.YData;
+plot([x3; x4],[y3; y4],'Color',[.8 .8 .8],'linewidth',0.5)
+% add legend
+hleglines = [vp(1, 1).ViolinPlot, vp(1, 3).ViolinPlot];
+legend(hleglines, {'left', 'right'},'Location','northeast')
+legend('boxoff')
+
+
+% average across conditions
+alpha_contraHi = mean([HiLo_rightpost_sbj LoHi_leftpost_sbj],2);
+alpha_contraLo = mean([HiLo_leftpost_sbj LoHi_rightpost_sbj],2);
+
+% grand average
+alpha_contraHi_ga = mean(alpha_contraHi);
+alpha_contraLo_ga = mean(alpha_contraLo);
+
+
+% Plot for Fig. 5 of the paper [part 2]
+% plot delta alpha power (dif between probabilities)
+figure(f1)
+subplot(222)
+alpha_diff_sbj = alpha_contraLo - alpha_contraHi;
+violinplot(alpha_diff_sbj, [], 'ShowMean', true); hold on
+yline(0, '--'); hold off
+xlim([0.5,1.5]); xticklabels('low>high');
+ylim([-.1, .05]); ylabel('Alpha power');
+ax = gca;
+ax.FontSize = 6;
+
+
+% statistic
+addpath('...\Cohens_d')
+addpath('...\Bayes_factor')
+
+[~,p,~,stats] = ttest(alpha_contraHi, alpha_contraLo) %t-test
+computeCohen_d(alpha_contraHi, alpha_contraLo, 'paired')
+[bf10,p] = bf.ttest(alpha_contraHi,alpha_contraLo)
+
+
+%% Alpha-power time course
+
+% select sensors
+ptime = tfr_dataHiLo{1}.time;
+
+tfr_dataHiLo_left = cell(nsubj,1);
+tfr_dataLoHi_left = cell(nsubj,1);
+tfr_dataHiLo_right = cell(nsubj,1);
+tfr_dataLoHi_right = cell(nsubj,1);
+HiLo_left_sbj = nan(nsubj,size(ptime,2));
+LoHi_left_sbj = nan(nsubj,size(ptime,2));
+HiLo_right_sbj = nan(nsubj,size(ptime,2));
+LoHi_right_sbj = nan(nsubj,size(ptime,2));
+
+cfg                 = [];
+cfg.avgoverchan     = 'yes';
+cfg.frequency       = [8 12];
+cfg.avgoverfreq     = 'yes';
+sensorL = [121 122 139 140 123 124 127 128 129 130 141 142 143 144 147 148 149 150 155 156];
+sensorR = [169 170 187 188 185 186 191 192 189 190 173 174 179 180 175 176 151 152 153 154];
+sensorL = sensorL([2:2:numel(sensorL)])/2;
+sensorR = sensorR([2:2:numel(sensorR)])/2;
+cfg.channel         = sensorL;
+for i=1:nsubj
+    tfr_dataHiLo_left{i} = ft_selectdata(cfg, tfr_dataHiLo{i});
+    tfr_dataHiLo_left{i}.label = {'MEG0102'}; %used as placeholder
+    HiLo_left_sbj(i,:) = squeeze(tfr_dataHiLo_left{i}.powspctrm);
+    tfr_dataLoHi_left{i} = ft_selectdata(cfg, tfr_dataLoHi{i});
+    tfr_dataLoHi_left{i}.label = {'MEG0102'}; %used as placeholder
+    LoHi_left_sbj(i,:) = squeeze(tfr_dataLoHi_left{i}.powspctrm);
+end
+cfg.channel         = sensorR;
+for i=1:nsubj
+    tfr_dataHiLo_right{i} = ft_selectdata(cfg, tfr_dataHiLo{i});
+    tfr_dataHiLo_right{i}.label = {'MEG0102'}; %used as placeholder
+    HiLo_right_sbj(i,:) = squeeze(tfr_dataHiLo_right{i}.powspctrm);
+    tfr_dataLoHi_right{i} = ft_selectdata(cfg, tfr_dataLoHi{i});
+    tfr_dataLoHi_right{i}.label = {'MEG0102'}; %used as placeholder
+    LoHi_right_sbj(i,:) = squeeze(tfr_dataLoHi_right{i}.powspctrm);
+end
+
+% average across hemispheres
+tfr_dataHi = cell(nsubj,1);
+tfr_dataLo = cell(nsubj,1);
+alphatime_Hi_sbj = nan(nsubj,size(ptime,2));
+alphatime_Lo_sbj = nan(nsubj,size(ptime,2));
+cfg             = [];
+cfg.parameter   = 'powspctrm';
+cfg.operation   = '(x1+x2)/2';
+for i=1:nsubj
+    tfr_dataHi{i} = ft_math(cfg, tfr_dataHiLo_right{i}, tfr_dataLoHi_left{i});
+    alphatime_Hi_sbj(i,:) = squeeze(tfr_dataHi{i}.powspctrm);
+    tfr_dataLo{i} = ft_math(cfg, tfr_dataHiLo_left{i}, tfr_dataLoHi_right{i});
+    alphatime_Lo_sbj(i,:) = squeeze(tfr_dataLo{i}.powspctrm);
+end
+
+% grand average
+cfg         = [];
+tfr_dataHi_ga = ft_freqgrandaverage(cfg, tfr_dataHi{:});
+tfr_dataLo_ga = ft_freqgrandaverage(cfg, tfr_dataLo{:});
+alphatime_Hi_ga = squeeze(tfr_dataHi_ga.powspctrm);
+alphatime_Lo_ga = squeeze(tfr_dataLo_ga.powspctrm);
+
+% standard error
+tfr_dataHi_ga.sem = std(alphatime_Hi_sbj)/sqrt(nsubj);
+tfr_dataLo_ga.sem = std(alphatime_Lo_sbj)/sqrt(nsubj);
+
+
+% Plot for Fig. 5 of the paper
+tfr_dataHi_ga.mask = stat.mask; % adding mask to data
+tfr_dataLo_ga.mask = stat.mask; % adding mask to data
+
+cfg               = [];
+cfg.maskparameter = 'mask';
+cfg.maskstyle     = 'box';
+cfg.maskfacealpha = 0.5; % transparency of mask
+if strcmp(baselinecor, 'yes')
+    cfg.ylim        = [1  2.1];
+else
+    cfg.ylim        = [.15e-23 1.2e-23];
+end
+figure(); ft_singleplotER(cfg, tfr_dataHi_ga, tfr_dataLo_ga); hold on;
+
+ptime = tfr_dataHi_ga.time;
+x_HiLo = ptime(1:60);
+y1 = squeeze(tfr_dataHi_ga.powspctrm - tfr_dataHi_ga.sem)'; y1 = y1(1:60);
+y2 = squeeze(tfr_dataHi_ga.powspctrm + tfr_dataHi_ga.sem)'; y2 = y2(1:60);
+fill([x_HiLo fliplr(x_HiLo)], [y1 fliplr(y2)], 'b', 'LineStyle','none'); %plot standard error
+alpha(0.10)
+y1 = squeeze(tfr_dataLo_ga.powspctrm - tfr_dataLo_ga.sem)'; y1 = y1(1:60);
+y2 = squeeze(tfr_dataLo_ga.powspctrm + tfr_dataLo_ga.sem)'; y2 = y2(1:60);
+fill([x_HiLo fliplr(x_HiLo)], [y1 fliplr(y2)], 'r', 'LineStyle','none'); hold off %plot standard error
+alpha(0.10)
+xlabel('time'); ylabel('Alpha power');
+xline(0, '--'); xline(1.5, '--'); 
+yline(0, '--'); title('');
+legend('high','low'); legend boxoff
+
+
+%% Alpha-powr analysis using z-score baseline correction (Wang et al. 2019) 
+% (as in Wang et al., 2019, JoCN)
+
+clear
+
+% % set params
+% baselinecor     = 'yes';         %'no' or 'yes'
+% combineplanar   = 'yes';        %'no' or 'yes'
+% selsensors      = 'occ';        %'occ' or 'par'
+
+% load tfr data
+folder = 'Q:/MEG_data/';
+filelist = dir(fullfile(folder, '**', 'tfr_kt3.mat')); %eye-tracking controled
+
+filelistHiLo = filelist([1 5 3 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition
+filelistLoHi = filelist([7 2 6 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition
+nsubj = size(filelistLoHi,1);
+
+% % load data
+% tfr_dataHiLo = cell(nsubj,1);
+% tfr_dataLoHi = cell(nsubj,1);
+% for i=1:nsubj
+%     fprintf(1,'#%d\n',i); %print subject number
+%     
+%     % high-low cond
+%     tfr_dataHiLo{i} = load([filelistHiLo(i).folder '\' filelistHiLo(i).name]);
+%     % select frequency range
+%     cfg             = [];
+%     cfg.frequency   = [8 12];
+%     tfr_dataHiLo{i} = ft_selectdata(cfg, tfr_dataHiLo{i}.tfr_all);
+%     % combine planar gradiometers
+%     cfg                 = [];
+%     cfg.method          = 'sum';
+%     tfr_dataHiLo{i} = ft_combineplanar(cfg,tfr_dataHiLo{i});
+% 
+%     % low-high cond
+%     tfr_dataLoHi{i} = load([filelistLoHi(i).folder '\' filelistLoHi(i).name]);
+%     % select frequency range
+%     cfg             = [];
+%     cfg.frequency   = [8 12];
+%     tfr_dataLoHi{i} = ft_selectdata(cfg, tfr_dataLoHi{i}.tfr_all);
+%     % combine planar gradiometers
+%     cfg                 = [];
+%     cfg.method          = 'sum';
+%     tfr_dataLoHi{i} = ft_combineplanar(cfg,tfr_dataLoHi{i});
+% end
+% % save('Q:\MEG_data\tfr_dataHiLo_kt3all2.mat', 'tfr_dataHiLo', '-v7.3');
+% % save('Q:\MEG_data\tfr_dataLoHi_kt3all2.mat', 'tfr_dataLoHi', '-v7.3');
+
+load('Q:\MEG_data\tfr_dataHiLo_kt3all2.mat');
+load('Q:\MEG_data\tfr_dataLoHi_kt3all2.mat');
+
+% selected sensors matched by pairs across hemifields
+left_sensors  = [121 122 139 140 123 124 127 128 129 130 141 142 143 144 145 146 147 148 155 156];
+right_sensors = [169 170 187 188 185 186 191 192 189 190 173 174 179 180 177 178 175 176 153 154];
+left_sensors = left_sensors([2:2:numel(left_sensors)])/2;  %combine sens
+right_sensors = right_sensors([2:2:numel(right_sensors)])/2;  %combine sens
+cont_high_HiLo = cell(nsubj,1);
+ipsi_high_HiLo = cell(nsubj,1);
+cont_high_LoHi = cell(nsubj,1);
+ipsi_high_LoHi = cell(nsubj,1);
+for i = 1:nsubj
+    % select right sensors
+    cfg = [];
+    cfg.channel = right_sensors;
+    cont_high_HiLo{i} = ft_selectdata(cfg, tfr_dataHiLo{i});
+    ipsi_high_LoHi{i} = ft_selectdata(cfg, tfr_dataLoHi{i});
+    % select left sensors
+    cfg = [];
+    cfg.channel = left_sensors;
+    ipsi_high_HiLo{i} = ft_selectdata(cfg, tfr_dataHiLo{i});
+    ipsi_high_HiLo{i}.label = cont_high_HiLo{i}.label;  % renamed sensor labels for consistency 
+    cont_high_LoHi{i} = ft_selectdata(cfg, tfr_dataLoHi{i});
+    cont_high_LoHi{i}.label = cont_high_HiLo{i}.label;  % renamed sensor labels for consistency 
+end
+
+% compute difference between contra and ipsi
+cont_ipsi_dif_HiLo = cell(nsubj,1);
+cont_ipsi_dif_LoHi = cell(nsubj,1);
+for i = 1:nsubj
+    cfg = [];
+    cfg.parameter = 'powspctrm';
+    cfg.operation = 'subtract';
+    cont_ipsi_dif_HiLo{i} = ft_math(cfg, cont_high_HiLo{i}, ipsi_high_HiLo{i});
+    cont_ipsi_dif_LoHi{i} = ft_math(cfg, cont_high_LoHi{i}, ipsi_high_LoHi{i});
+end
+
+% % run permutation
+% av_HiLo = zeros(1000,nsubj,10,5,61);  % nperm * nsubj * nsens * nfreq * ntime
+% av_LoHi = zeros(1000,nsubj,10,5,61);  % nperm * nsubj * nsens * nfreq * ntime
+% for i = 1:nsubj
+%     fprintf('#%d\n',i)
+%     for p = 1:1000
+%         % get data
+%         cont_data_HiLo = cont_high_HiLo{i}.powspctrm;
+%         ipsi_data_HiLo = ipsi_high_HiLo{i}.powspctrm;
+%         cont_data_LoHi = cont_high_LoHi{i}.powspctrm;
+%         ipsi_data_LoHi = ipsi_high_LoHi{i}.powspctrm;
+%         % get nr of trials
+%         ntrials_HiLo = size(cont_data_HiLo,1);
+%         ntrials_LoHi = size(cont_data_LoHi,1);
+%         % shuffle conditions across trials
+%         idx_HiLo = randperm(ntrials_HiLo,fix(ntrials_HiLo/2));
+%         x_HiLo = cat(1,cont_data_HiLo(idx_HiLo,:,:,:), ipsi_data_HiLo(setdiff(1:end,idx_HiLo),:,:,:));
+%         y_HiLo = cat(1,ipsi_data_HiLo(idx_HiLo,:,:,:), cont_data_HiLo(setdiff(1:end,idx_HiLo),:,:,:));
+%         idx_LoHi = randperm(ntrials_LoHi,fix(ntrials_LoHi/2));
+%         x_LoHi = cat(1,cont_data_LoHi(idx_LoHi,:,:,:), ipsi_data_LoHi(setdiff(1:end,idx_LoHi),:,:,:));
+%         y_LoHi = cat(1,ipsi_data_LoHi(idx_LoHi,:,:,:), cont_data_LoHi(setdiff(1:end,idx_LoHi),:,:,:));
+%         % compute difference between surrogate contra and ipsi
+%         d_HiLo = x_HiLo-y_HiLo;
+%         d_LoHi = x_LoHi-y_LoHi;
+%         % compute averaged difference
+%         av_HiLo(p,i,:,:,:) = squeeze(mean(d_HiLo,1));
+%         av_LoHi(p,i,:,:,:) = squeeze(mean(d_LoHi,1));
+%     end
+% end
+% % save('Q:\MEG_data\av_HiLo.mat', 'av_HiLo', '-v7.3');
+% % save('Q:\MEG_data\av_LoHi.mat', 'av_LoHi', '-v7.3');
+
+load('Q:\MEG_data\av_HiLo.mat');
+load('Q:\MEG_data\av_LoHi.mat'); 
+
+% some control plots
+bPlotA0 = 0;
+if bPlotA0 == 1
+    % size(av_HiLo) = [1000, 20, 20, 5, 61] - nrand * nsubj * nsens * nfreq * ntime
+    iSubj = 1;
+    tTime = -0.5;
+    t = cont_ipsi_dif_HiLo{1}.time;
+    [~, iTime] = min(abs(tTime - t));
+    figure;
+    for iSens = 1:10
+        subplot(3, 4, iSens);
+        x = mean(av_HiLo(:, iSubj, iSens, :, iTime), 4); % mean over frequencies
+        histogram(x,'BinEdges',-.1e-23:.005e-23:.1e-23);
+        title(sprintf('sensor %d, time: %1.3f', iSens, t(iTime)), 'FontWeight', 'normal');
+    end
+    figure;
+    for iSens = 1:10
+        subplot(3, 4, iSens);
+        s_HiLo = mean(squeeze(mean(av_HiLo(:, iSubj, iSens, :, :), 1)), 1); % mean over frequencies
+        s_LoHi = mean(squeeze(mean(av_LoHi(:, iSubj, iSens, :, :), 1)), 1); % mean over frequencies
+        plot(cont_ipsi_dif_HiLo{1}.time, s_HiLo, 'Color', 'k'); hold on;
+        plot(cont_ipsi_dif_LoHi{1}.time, s_LoHi, 'Color', 'r');
+        x_HiLo = squeeze(mean(cont_ipsi_dif_HiLo{1}.powspctrm, 1));
+        x_LoHi = squeeze(mean(cont_ipsi_dif_LoHi{1}.powspctrm, 1));
+        plot(cont_ipsi_dif_HiLo{1}.time, squeeze(x_HiLo(iSens, :, :)), 'LineStyle', '-.', 'Color', 'k');
+        plot(cont_ipsi_dif_LoHi{1}.time, squeeze(x_LoHi(iSens, :, :)), 'LineStyle', '-.', 'Color', 'r');
+        title(sprintf('sensor %d', iSens), 'FontWeight', 'normal');
+    end
+end
+
+% transform raw contra-ipsi differences into z-scores
+cont_ipsi_dif_HiLo_z = cont_ipsi_dif_HiLo;
+cont_ipsi_dif_LoHi_z = cont_ipsi_dif_LoHi;
+for i = 1:nsubj
+    x_HiLo = squeeze(cont_ipsi_dif_HiLo{i}.powspctrm);
+    m_HiLo = squeeze(mean(av_HiLo(:,i,:,:,:),1));
+    s_HiLo = squeeze(std(av_HiLo(:,i,:,:,:),0,1));
+    for t = size(x_HiLo,1)
+        cont_ipsi_dif_HiLo_z{i}.powspctrm(t,:,:,:) = (squeeze(x_HiLo(t,:,:,:))-m_HiLo)./s_HiLo;
+    end
+    x_LoHi = squeeze(cont_ipsi_dif_LoHi{i}.powspctrm);
+    m_LoHi = squeeze(mean(av_LoHi(:,i,:,:,:),1));
+    s_LoHi = squeeze(std(av_LoHi(:,i,:,:,:),0,1));
+    for t = size(x_LoHi,1)
+        cont_ipsi_dif_LoHi_z{i}.powspctrm(t,:,:,:) = (squeeze(x_LoHi(t,:,:,:))-m_LoHi)./s_LoHi;
+    end
+end
+
+% some control plots
+bPlotA1 = 0;
+if bPlotA1 == 1
+    iSubj = 1;
+    figure;
+    for iSens = 1:10
+        subplot(3, 4, iSens);
+        z_HiLo = mean(squeeze(mean(cont_ipsi_dif_HiLo_z{iSubj}.powspctrm(:, iSens, :, :), 1)), 1); % mean over frequencies
+        z_LoHi = mean(squeeze(mean(cont_ipsi_dif_LoHi_z{iSubj}.powspctrm(:, iSens, :, :), 1)), 1); % mean over frequencies
+        plot(cont_ipsi_dif_HiLo_z{iSubj}.time, z_HiLo); hold on;
+        plot(cont_ipsi_dif_LoHi_z{iSubj}.time, z_LoHi);
+        title(sprintf('sensor #%d | cont_ipsi_dif_HiLo/LoHi', iSens), 'FontWeight', 'normal', 'Interpreter', 'none');
+        box off;
+        ylim([-1, 1]);
+        xlabel('t (s)'); ylabel('z-score');
+    end
+end
+
+% average across trials, sensors and frequencies
+cont_ipsi_dif_HiLo_z_av = cell(nsubj,1);
+cont_ipsi_dif_LoHi_z_av = cell(nsubj,1);
+cfg = [];
+cfg.avgoverrpt = 'yes';
+cfg.avgoverchan = 'yes';
+cfg.avgoverfreq = 'yes';
+for i = 1:nsubj
+    cont_ipsi_dif_HiLo_z_av{i} = ft_selectdata(cfg, cont_ipsi_dif_HiLo_z{i});
+    cont_ipsi_dif_LoHi_z_av{i} = ft_selectdata(cfg, cont_ipsi_dif_LoHi_z{i});
+end
+
+% some control plots
+bPlotA2 = 0;
+if bPlotA2 == 1
+    figure;
+    for iSubj  = 1:20
+        subplot(4, 5, iSubj);
+        plot(cont_ipsi_dif_HiLo_z{iSubj}.time, squeeze(cont_ipsi_dif_HiLo_z_av{iSubj}.powspctrm)); hold on
+        plot(cont_ipsi_dif_LoHi_z{iSubj}.time, squeeze(cont_ipsi_dif_LoHi_z_av{iSubj}.powspctrm));
+        box off;
+        ylim([-.1, .1]);
+        xlabel('t (s)'); ylabel('z-score');
+    end
+end
+
+% grand average within sessions
+cfg         = [];
+cont_ipsi_dif_HiLo_ga = ft_freqgrandaverage(cfg, cont_ipsi_dif_HiLo_z_av{:});
+cont_ipsi_dif_LoHi_ga = ft_freqgrandaverage(cfg, cont_ipsi_dif_LoHi_z_av{:});
+
+% average across sessions
+cont_ipsi_dif_z_av = cont_ipsi_dif_HiLo_z_av;
+for i = 1:nsubj
+    cont_ipsi_dif_z_av{i}.powspctrm = mean([ ...
+        cont_ipsi_dif_HiLo_z_av{i}.powspctrm, ...
+        cont_ipsi_dif_LoHi_z_av{i}.powspctrm],2);
+end
+
+% grand average across sessions
+cont_ipsi_dif_ga = ft_freqgrandaverage([], cont_ipsi_dif_z_av{:});
+
+% PLOT 1
+
+% average within the placeholder time window and get individual data
+cont_ipsi_dif_z_av_sbj = nan(nsubj,1);
+for i = 1:nsubj
+    cfg             = [];
+    cfg.latency = [0 1.5];
+    cfg.avgovertime = 'yes';
+    temp = ft_selectdata(cfg, cont_ipsi_dif_z_av{i});
+    cont_ipsi_dif_z_av_sbj(i) = temp.powspctrm;
+end
+
+% plot
+% username = getenv('USERNAME');
+% addpath(['C:\Users\' username '\OneDrive - University of Birmingham\UoB\Scripts\Violinplot'])
+figure
+violinplot(cont_ipsi_dif_z_av_sbj, [], 'ShowMean', true); hold on
+yline(0, '--'); hold off
+xlim([0.5,1.5]); title('high probability: contra minus ipsi');
+ylim([-.02, .02]); ylabel('Alpha power (z-score)');
+
+% statistic
+addpath('C:\Users\ferranto\OneDrive - University of Birmingham\UoB\Scripts\Cohens_d')
+addpath('C:\Users\ferranto\OneDrive - University of Birmingham\UoB\Scripts\Bayes_factor')
+
+[~,p,~,stats] = ttest(cont_ipsi_dif_z_av_sbj) %t-test
+computeCohen_d(cont_ipsi_dif_z_av_sbj, zeros(nsubj,1), 'paired')
+[bf10,p] = bf.ttest(cont_ipsi_dif_z_av_sbj)
+
+% PLOT 2
+
+% cluster-based permutation 
+cfg         = [];
+cfg.method           = 'montecarlo';
+cfg.statistic        = 'depsamplesT';
+cfg.correctm         = 'cluster';
+cfg.clusteralpha     = 0.05;
+cfg.clusterstatistic = 'maxsum';
+cfg.neighbours       = [];  % same as defined for the between-trials experiment
+cfg.tail             = 0;
+cfg.clustertail      = 0;
+cfg.alpha            = 0.05;
+cfg.numrandomization = 1000;
+
+Nsubj  = 20;
+design = zeros(2, Nsubj*2);
+design(1,:) = [1:Nsubj 1:Nsubj];
+design(2,:) = [ones(1,Nsubj) ones(1,Nsubj)*2];
+
+cfg.design = design;
+cfg.uvar   = 1;
+cfg.ivar   = 2;
+
+% create null distribution
+cont_ipsi_dif_z_av_null = cont_ipsi_dif_z_av;
+for i = 1:size(cont_ipsi_dif_z_av,1)
+    cont_ipsi_dif_z_av_null{i}.powspctrm = zeros(size(cont_ipsi_dif_z_av{i}.powspctrm));
+end
+
+% run test
+[stat] = ft_freqstatistics(cfg, cont_ipsi_dif_z_av{:}, cont_ipsi_dif_z_av_null{:});
+
+% add mask to data
+cont_ipsi_dif_ga.mask = stat.mask; 
+
+% plot
+cfg               = [];
+cfg.title         = 'high distractor probability: contra minus ipsi';
+cfg.ylim          = [-.02, .02];
+cfg.maskparameter = 'mask';
+cfg.maskstyle     = 'box';
+cfg.maskfacealpha = 0.5;
+figure(); ft_singleplotER(cfg, cont_ipsi_dif_ga); hold on;
+xlabel('t (s)'); ylabel('z-score'); yline(0,'k--'); xline(0,'k--'); xline(1.5,'k--');
+
+% add standard errors in the plot
+cont_ipsi_dif_z_av_powspctrm = zeros(nsubj,1,1,61);
+for i = 1:nsubj
+    cont_ipsi_dif_z_av_powspctrm(i,:,:,:) = cont_ipsi_dif_z_av{i}.powspctrm;
+end
+cont_ipsi_dif_ga.sem = squeeze(std(cont_ipsi_dif_z_av_powspctrm,[],1)/sqrt(nsubj));
+
+y1 = squeeze(cont_ipsi_dif_ga.powspctrm) - cont_ipsi_dif_ga.sem; y1 = y1';
+y2 = squeeze(cont_ipsi_dif_ga.powspctrm) + cont_ipsi_dif_ga.sem; y2 = y2';
+patch([squeeze(cont_ipsi_dif_ga.time) fliplr(squeeze(cont_ipsi_dif_ga.time))], [y1 fliplr(y2)], 'g', 'LineStyle','none'); %plot standard error
+alpha(0.25)
+
+
+%% TFR analysis 7 - keep trials (split session in 3 parts)
+
+clear
+
+% set params
+baselinecor     = 'yes';         %'no' or 'yes'
+combineplanar   = 'yes';        %'no' or 'yes'
+selsensors      = 'occ';        %'occ' or 'par'
+
+% load tfr data
+folder = 'Q:/MEG_data/';
+filelist = dir(fullfile(folder, '**', 'tfr_kt4.mat')); %eye-tracking controled
+
+filelistHiLo = filelist([1 5 3 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition
+filelistLoHi = filelist([7 2 6 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition
+nsubj = size(filelistLoHi,1);
+
+% tfr_dataHiLo = cell(nsubj,1);
+% tfr_dataLoHi = cell(nsubj,1);
+% for i=1:nsubj
+%     fprintf(1,'#%d\n',i); %print subject number
+%     
+%     % high-low cond
+%     tfr_dataHiLo{i} = load([filelistHiLo(i).folder '\' filelistHiLo(i).name]);
+%     % select frequency range
+%     cfg             = [];
+%     cfg.frequency   = [8 12];
+%     tfr_dataHiLo{i} = ft_selectdata(cfg, tfr_dataHiLo{i}.tfr_all);
+% 
+%     % low-high cond
+%     tfr_dataLoHi{i} = load([filelistLoHi(i).folder '\' filelistLoHi(i).name]);
+%     % select frequency range
+%     cfg             = [];
+%     cfg.frequency   = [8 12];
+%     tfr_dataLoHi{i} = ft_selectdata(cfg, tfr_dataLoHi{i}.tfr_all);
+% end
+% % save('Q:\MEG_data\tfr_dataHiLo_kt4all.mat', 'tfr_dataHiLo', '-v7.3');
+% % save('Q:\MEG_data\tfr_dataLoHi_kt4all.mat', 'tfr_dataLoHi', '-v7.3');
+
+load('Q:\MEG_data\tfr_dataHiLo_kt4all.mat');
+load('Q:\MEG_data\tfr_dataLoHi_kt4all.mat');
+
+% split trials into 3 epochs (1=early, 2=middle and 3=late) and average
+% trials
+tfr_dataHiLo_split = cell(nsubj,3);
+tfr_dataLoHi_split = cell(nsubj,3);
+for i = 1:nsubj
+    ntrialsHiLo = size(tfr_dataHiLo{i}.trialinfo,1);
+    qsHiLo = quantile(1:ntrialsHiLo,[0, 1/3, 2/3, 1]);
+    ntrialsLoHi = size(tfr_dataLoHi{i}.trialinfo,1);
+    qsLoHi = quantile(1:ntrialsLoHi,[0, 1/3, 2/3, 1]);
+    for j = 1:3
+        cfg = [];
+        cfg.trials = [round(qsHiLo(j)):round(qsHiLo(j+1))-1];
+        cfg.avgoverrpt = 'yes';
+%         cfg.avgoverfreq = 'yes';
+        tfr_dataHiLo_split{i,j} = ft_selectdata(cfg, tfr_dataHiLo{i});
+        cfg = [];
+        cfg.trials = [round(qsLoHi(j)):round(qsLoHi(j+1))-1];
+        cfg.avgoverrpt = 'yes';
+%         cfg.avgoverfreq = 'yes';
+        tfr_dataLoHi_split{i,j} = ft_selectdata(cfg, tfr_dataLoHi{i});
+    end
+end
+
+% baseline correction
+if strcmp(baselinecor, 'yes')
+    cfg               = [];
+    cfg.baseline      = [-1 -0.5];
+    cfg.baselinetype  = 'relative'; %NOTE: use 'relchange' in the future
+    for i = 1:nsubj
+        for j = 1:3
+            tfr_dataHiLo_split{i,j} = ft_freqbaseline(cfg, tfr_dataHiLo_split{i,j});
+            tfr_dataLoHi_split{i,j} = ft_freqbaseline(cfg, tfr_dataLoHi_split{i,j});
+        end
+    end
+end
+
+% combine sensors
+if strcmp(combineplanar, 'yes')
+    cfg                 = [];
+    cfg.method          = 'sum';
+    for i = 1:nsubj
+        for j = 1:3
+            tfr_dataHiLo_split{i,j} = ft_combineplanar(cfg,tfr_dataHiLo_split{i,j}); %ft_combineplanar_nocheck
+            tfr_dataLoHi_split{i,j} = ft_combineplanar(cfg,tfr_dataLoHi_split{i,j});
+        end
+    end
+end
+
+% grand average
+tfr_dataHiLo_split_ga = cell(3,1);
+tfr_dataLoHi_split_ga = cell(3,1);
+cfg                 = [];
+for j = 1:3
+    tfr_dataHiLo_split_ga{j} = ft_freqgrandaverage(cfg, tfr_dataHiLo_split{:,j});
+    tfr_dataLoHi_split_ga{j} = ft_freqgrandaverage(cfg, tfr_dataLoHi_split{:,j});
+end
+
+% topoplot
+plotmarkers = 1;
+cfg                 = []; %plot topography of alpha (8-12 HZ)
+cfg.xlim            = [0 1.5];
+if strcmp(baselinecor, 'no')
+    cfg.zlim            = [-1e-23  1e-23];
+else
+    cfg.zlim            = [.5  3];
+end
+if strcmp(combineplanar, 'yes')
+    cfg.layout  = 'neuromag306cmb.lay';
+else
+    cfg.layout  = 'neuromag306planar.lay';
+end
+if plotmarkers
+    if strcmp(selsensors, 'occ')
+        left_sensors  = [121 122 139 140 123 124 127 128 129 130 141 142 143 144 145 146 147 148 155 156];
+        right_sensors = [169 170 187 188 185 186 191 192 189 190 173 174 179 180 177 178 175 176 153 154];
+    else
+        left_sensors  = [15 16 13 14 31 32 117 118 119 120 133 134 123 124 121 122 139 140];
+        right_sensors = [97 98 99 100 81 82 183 184 181 182 167 168 185 186 187 188 169 170];
+    end
+    if strcmp(combineplanar, 'yes')
+        left_sensors = left_sensors([2:2:numel(left_sensors)])/2;
+        right_sensors = right_sensors([2:2:numel(right_sensors)])/2;
+    end
+    cfg.highlight           = 'on';
+    cfg.highlightchannel    = [left_sensors, right_sensors];
+    cfg.highlightsize       = 10;
+end
+
+figure('Position', [100 100 350 280]); ft_topoplotTFR(cfg, tfr_dataHiLo_split_ga{1}); title('High-Low');
+colormap jet
+figure('Position', [100 100 350 280]); ft_topoplotTFR(cfg, tfr_dataHiLo_split_ga{2}); title('Low-High');
+colormap jet
+figure('Position', [100 100 350 280]); ft_topoplotTFR(cfg, tfr_dataHiLo_split_ga{3}); title('Low-High');
+colormap jet
+figure('Position', [100 100 350 280]); ft_topoplotTFR(cfg, tfr_dataLoHi_split_ga{1}); title('High-Low');
+colormap jet
+figure('Position', [100 100 350 280]); ft_topoplotTFR(cfg, tfr_dataLoHi_split_ga{2}); title('Low-High');
+colormap jet
+figure('Position', [100 100 350 280]); ft_topoplotTFR(cfg, tfr_dataLoHi_split_ga{3}); title('Low-High');
+colormap jet
+
+
+
+% statistics ------------------------------------------------------------------
+
+% average over frequency band, time window and selected sensors
+tfr_dataHiLo_leftpost = cell(nsubj,3);
+tfr_dataHiLo_rightpost = cell(nsubj,3);
+tfr_dataLoHi_leftpost = cell(nsubj,3);
+tfr_dataLoHi_rightpost = cell(nsubj,3);
+if strcmp(selsensors, 'occ')
+    left_sensors  = [121 122 139 140 123 124 127 128 129 130 141 142 143 144 145 146 147 148 155 156];
+    right_sensors = [169 170 187 188 185 186 191 192 189 190 173 174 179 180 177 178 175 176 153 154];
+else
+    left_sensors  = [15 16 13 14 31 32 117 118 119 120 133 134 123 124 121 122 139 140];
+    right_sensors = [97 98 99 100 81 82 183 184 181 182 167 168 185 186 187 188 169 170];
+end
+if strcmp(combineplanar, 'yes')
+    left_sensors = left_sensors([2:2:numel(left_sensors)])/2;
+    right_sensors = right_sensors([2:2:numel(right_sensors)])/2;
+end
+cfg                 = [];
+cfg.frequency       = [8 12];   %alpha
+cfg.avgoverfreq     = 'yes';
+cfg.latency         = [0 1.5];  %pre-search array time window
+cfg.avgovertime     = 'yes';
+cfg.avgoverchan     = 'yes';
+
+cfg.channel         = left_sensors;
+for i = 1:nsubj
+    for j = 1:3
+        tfr_dataHiLo_leftpost{i,j} = ft_selectdata(cfg, tfr_dataHiLo_split{i,j});
+        tfr_dataLoHi_leftpost{i,j} = ft_selectdata(cfg, tfr_dataLoHi_split{i,j});
+    end
+end
+
+cfg.channel         = right_sensors;
+for i = 1:nsubj
+    for j = 1:3
+        tfr_dataHiLo_rightpost{i,j} = ft_selectdata(cfg, tfr_dataHiLo_split{i,j});
+        tfr_dataLoHi_rightpost{i,j} = ft_selectdata(cfg, tfr_dataLoHi_split{i,j});
+    end
+end
+
+% individual average
+HiLo_leftpost_sbj = nan(nsubj,3);
+LoHi_leftpost_sbj = nan(nsubj,3);
+HiLo_rightpost_sbj = nan(nsubj,3);
+LoHi_rightpost_sbj = nan(nsubj,3);
+for i = 1:nsubj
+    for j = 1:3
+        HiLo_leftpost_sbj(i,j) = tfr_dataHiLo_leftpost{i,j}.powspctrm;
+        LoHi_leftpost_sbj(i,j) = tfr_dataLoHi_leftpost{i,j}.powspctrm;
+        HiLo_rightpost_sbj(i,j) = tfr_dataHiLo_rightpost{i,j}.powspctrm;
+        LoHi_rightpost_sbj(i,j) = tfr_dataLoHi_rightpost{i,j}.powspctrm;
+    end
+end
+
+% % grand average
+% cfg         = [];
+% tfr_dataHiLo_leftpost_ga = ft_freqgrandaverage(cfg, tfr_dataHiLo_leftpost{:});
+% HiLo_leftpost_ga = tfr_dataHiLo_leftpost_ga.powspctrm; clearvars tfr_dataHiLo_leftpost_ga;
+% tfr_dataLoHi_leftpost_ga = ft_freqgrandaverage(cfg, tfr_dataLoHi_leftpost{:});
+% LoHi_leftpost_ga = tfr_dataLoHi_leftpost_ga.powspctrm; clearvars tfr_dataLoHi_leftpost_ga;
+% tfr_dataHiLo_rightpost_ga = ft_freqgrandaverage(cfg, tfr_dataHiLo_rightpost{:});
+% HiLo_rightpost_ga = tfr_dataHiLo_rightpost_ga.powspctrm; clearvars tfr_dataHiLo_rightpost_ga;
+% tfr_dataLoHi_rightpost_ga = ft_freqgrandaverage(cfg, tfr_dataLoHi_rightpost{:});
+% LoHi_rightpost_ga = tfr_dataLoHi_rightpost_ga.powspctrm; clearvars tfr_dataLoHi_rightpost_ga;
+
+
+
+% Plot
+username = getenv('USERNAME');
+addpath(['C:\Users\' username '\OneDrive - University of Birmingham\UoB\Scripts\Violinplot'])
+
+% plot alpha power by condition (hemi x probability)
+figure();
+for j = 1:3
+    subplot(1,3,j)
+    vp = violinplot([HiLo_rightpost_sbj(:,j), LoHi_rightpost_sbj(:,j), LoHi_leftpost_sbj(:,j), HiLo_leftpost_sbj(:,j)], [], 'ShowMean', true);
+    xlim([0.5,4.5]); xlabel('Distractor probability'); xticklabels({'high', 'low', 'high', 'low'});
+    ylim([0.2 2.5]); ylabel('Alpha power');
+    legend('left','right','FontSize',6); legend boxoff
+%     ax = gca;
+%     ax.FontSize = 6;
+    % set colours
+    vp(1, 1).ViolinColor = [0.3010    0.7450    0.9330];
+    vp(1, 2).ViolinColor = [0.3010    0.7450    0.9330];
+    vp(1, 3).ViolinColor = [0.8500    0.3250    0.0980];
+    vp(1, 4).ViolinColor = [0.8500    0.3250    0.0980];
+    % plot line between each subject data point
+    x1 = vp(1,1).ScatterPlot.XData;
+    y1 = vp(1,1).ScatterPlot.YData;
+    x2 = vp(1,2).ScatterPlot.XData;
+    y2 = vp(1,2).ScatterPlot.YData;
+    plot([x1; x2],[y1; y2],'Color',[.8 .8 .8],'linewidth',0.5)
+    x3 = vp(1,3).ScatterPlot.XData;
+    y3 = vp(1,3).ScatterPlot.YData;
+    x4 = vp(1,4).ScatterPlot.XData;
+    y4 = vp(1,4).ScatterPlot.YData;
+    plot([x3; x4],[y3; y4],'Color',[.8 .8 .8],'linewidth',0.5)
+    % add legend
+    hleglines = [vp(1, 1).ViolinPlot, vp(1, 3).ViolinPlot];
+    legend(hleglines, {'Right', 'Left'},'Location','northeast')
+    legend('boxoff')
+    subplot(1,3,j)
+end
+subplot(1,3,1); title('First');
+subplot(1,3,2); title('Middle');
+subplot(1,3,3); title('Last');
+
+% average across conditions
+alpha_contraHi = mean(cat(3,HiLo_rightpost_sbj, LoHi_leftpost_sbj),3);
+alpha_contraLo = mean(cat(3,HiLo_leftpost_sbj, LoHi_rightpost_sbj),3);
+% Plot delta alpha power (low-high diff)
+figure()
+for j = 1:3
+    subplot(1,3,j)
+    alpha_diff_sbj = alpha_contraLo(:,j) - alpha_contraHi(:,j);
+    violinplot(alpha_diff_sbj, [], 'ShowMean', true); hold on
+    yline(0, '--'); hold off
+    xlim([0.5,1.5]); xticklabels('low>high');
+    ylim([-.15, .15]); ylabel('Alpha power');
+%     ax = gca;
+%     ax.FontSize = 6;
+end
+subplot(1,3,1); title('First');
+subplot(1,3,2); title('Middle');
+subplot(1,3,3); title('Last');
+
+
+%% Cross-correlation analysis 1
+clear
+
+% load xcorr data
+folder = 'Q:/MEG_data/';
+filelistL = dir(fullfile(folder, '**', 'xcorLnew.mat'));
+filelistR = dir(fullfile(folder, '**', 'xcorRnew.mat'));
+
+filelistHi = filelistL([1 5 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition (sbj3 excluded)
+filelistLo = filelistR([1 5 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition (sbj3 excluded)
+% filelistHi = filelistR([7 2 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition (sbj3 excluded)
+% filelistLo = filelistL([7 2 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition (sbj3 excluded)
+
+xcorHi_data = zeros(204,401,size(filelistHi,1));
+xcorLo_data = zeros(204,401,size(filelistLo,1));
+for i = 1:size(filelistHi,1)
+    xcorHi_temp = load([filelistHi(i).folder '\' filelistHi(i).name]);
+    xcorHi_data(:,:,i) = cell2mat(struct2cell(xcorHi_temp));
+    xcorLo_temp = load([filelistLo(i).folder '\' filelistLo(i).name]);
+    xcorLo_data(:,:,i) = cell2mat(struct2cell(xcorLo_temp));
+end
+
+% compute hilbert transform
+xcorHi_hilb = zeros(401,204,size(filelistHi,1));
+xcorLo_hilb = zeros(401,204,size(filelistLo,1));
+for i = 1:size(filelistHi,1)
+    xcorHi_hilb(:,:,i) = abs(hilbert(xcorHi_data(:,:,i)'));
+    xcorLo_hilb(:,:,i) = abs(hilbert(xcorLo_data(:,:,i)'));
+end
+
+% normalize
+xcorHi_hilb_n = zeros(401,204,size(filelistHi,1));
+xcorLo_hilb_n = zeros(401,204,size(filelistHi,1));
+for i = 1:size(filelistHi,1)
+    minHi = min([xcorHi_hilb(:,:,i), xcorLo_hilb(:,:,i)],[],'all'); maxHL = max([xcorHi_hilb(:,:,i), xcorLo_hilb(:,:,i)],[],'all');
+    xcorHi_hilb_n(:,:,i) = (xcorHi_hilb(:,:,i) - minHi) / (maxHL - minHi);
+    xcorLo_hilb_n(:,:,i) = (xcorLo_hilb(:,:,i) - minHi) / (maxHL - minHi);
+end
+
+% compute mean
+xcorHi_mean = nanmean(xcorHi_hilb_n,3);
+xcorLo_mean = nanmean(xcorLo_hilb_n,3);
+
+% plot results
+pDelays = -200:1:200;
+figure; subplot(221); plot(pDelays, mean(xcorHi_hilb,3)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+subplot(222); plot(pDelays, mean(xcorLo_hilb,3)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+subplot(223); plot(pDelays, xcorHi_mean); ylim([0 1]); xlabel('lag'); ylabel('norm correlation');
+subplot(224); plot(pDelays, xcorLo_mean); ylim([0 1]); xlabel('lag'); ylabel('norm correlation');
+
+% topoplot
+load('Q:\MEG_data\20190724_b64d\190724\tfr_all');
+tfr_all.freq = 1;
+tfr_all.time = 1;
+tfr_all.dimord = 'chan_freq';
+for i=1:2
+    if i == 1
+        xcor = xcorHi_mean;
+    elseif i == 2
+        xcor = xcorLo_mean;
+    end
+    
+    %get values
+    xcor_value = max(xcor,[],1);
+
+    %replace values
+    tfr_all.powspctrm = xcor_value';
+    
+    %combine sensors
+    cfg             = [];
+    cfg.method      = 'sum';
+    tfr_all_c = ft_combineplanar(cfg,tfr_all);
+    
+    %topoplot
+    figure;
+    cfg                 = [];
+    cfg.zlim            = [0 1] ;
+    cfg.layout          = 'neuromag306cmb.lay';
+    plot_mat = ft_topoplotER(cfg,tfr_all_c);
+    colormap jet
+end
+
+
+%% Cross-correlation analysis 2
+clear
+
+% load xcorr data
+folder = 'Q:/MEG_data/';
+filelistL = dir(fullfile(folder, '**', 'xcorL.mat'));
+filelistR = dir(fullfile(folder, '**', 'xcorR.mat'));
+
+filelistHiL = filelistL([1 5 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition (sbj3 excluded)
+filelistLoR = filelistR([1 5 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition (sbj3 excluded)
+filelistLoL = filelistL([7 2 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition (sbj3 excluded)
+filelistHiR = filelistR([7 2 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition (sbj3 excluded)
+% %behavioural (IES) outliers removed - TO BE DONE
+
+xcorHiL_data = zeros(204,401,size(filelistHiL,1));
+xcorLoR_data = zeros(204,401,size(filelistLoR,1));
+xcorLoL_data = zeros(204,401,size(filelistLoL,1));
+xcorHiR_data = zeros(204,401,size(filelistHiR,1));
+for i = 1:size(filelistHiL,1)
+    xcorHiL_temp = load([filelistHiL(i).folder '\' filelistHiL(i).name]);
+    xcorHiL_data(:,:,i) = cell2mat(struct2cell(xcorHiL_temp));
+    xcorLoR_temp = load([filelistLoR(i).folder '\' filelistLoR(i).name]);
+    xcorLoR_data(:,:,i) = cell2mat(struct2cell(xcorLoR_temp));
+    xcorLoL_temp = load([filelistLoL(i).folder '\' filelistLoL(i).name]);
+    xcorLoL_data(:,:,i) = cell2mat(struct2cell(xcorLoL_temp));
+    xcorHiR_temp = load([filelistHiR(i).folder '\' filelistHiR(i).name]);
+    xcorHiR_data(:,:,i) = cell2mat(struct2cell(xcorHiR_temp));
+end
+
+% compute hilbert transform
+xcorHiL_hilb = zeros(401,204,size(filelistHiL,1));
+xcorLoR_hilb = zeros(401,204,size(filelistHiL,1));
+xcorLoL_hilb = zeros(401,204,size(filelistHiL,1));
+xcorHiR_hilb = zeros(401,204,size(filelistHiL,1));
+for i = 1:size(filelistHiL,1)
+    xcorHiL_hilb(:,:,i) = abs(hilbert(xcorHiL_data(:,:,i)'));
+    xcorLoR_hilb(:,:,i) = abs(hilbert(xcorLoR_data(:,:,i)'));
+    xcorLoL_hilb(:,:,i) = abs(hilbert(xcorLoL_data(:,:,i)'));
+    xcorHiR_hilb(:,:,i) = abs(hilbert(xcorHiR_data(:,:,i)'));
+end
+
+% % normalize
+% xcorHiL_hilb_n = zeros(401,204,size(filelistHiL,1));
+% xcorLoR_hilb_n = zeros(401,204,size(filelistHiL,1));
+% xcorLoL_hilb_n = zeros(401,204,size(filelistHiL,1));
+% xcorHiR_hilb_n = zeros(401,204,size(filelistHiL,1));
+% for i = 1:size(filelistHiL,1)
+%     minHi = min([xcorHiL_hilb(:,:,i), xcorLoR_hilb(:,:,i)],[],'all'); maxHL = max([xcorHiL_hilb(:,:,i), xcorLoR_hilb(:,:,i)],[],'all');
+%     xcorHiL_hilb_n(:,:,i) = (xcorHiL_hilb(:,:,i) - minHi) / (maxHL - minHi);
+%     xcorLoR_hilb_n(:,:,i) = (xcorLoR_hilb(:,:,i) - minHi) / (maxHL - minHi);
+%     minHi = min([xcorLoL_hilb(:,:,i), xcorHiR_hilb(:,:,i)],[],'all'); maxHL = max([xcorLoL_hilb(:,:,i), xcorHiR_hilb(:,:,i)],[],'all');
+%     xcorLoL_hilb_n(:,:,i) = (xcorLoL_hilb(:,:,i) - minHi) / (maxHL - minHi);
+%     xcorHiR_hilb_n(:,:,i) = (xcorHiR_hilb(:,:,i) - minHi) / (maxHL - minHi);
+% end
+
+% get peak value
+xcorHiL_peak = max(xcorHiL_hilb,[],1);
+xcorLoR_peak = max(xcorLoR_hilb,[],1);
+xcorLoL_peak = max(xcorLoL_hilb,[],1);
+xcorHiR_peak = max(xcorHiR_hilb,[],1);
+
+% compute difference between conditions
+xcorHLdiff = zeros(1,204,size(filelistHiL,1));
+xcorLHdiff = zeros(1,204,size(filelistHiL,1));
+% xcorHmLLdiff = zeros(1,204,size(filelistHiL,1));
+% xcorHmLRdiff = zeros(1,204,size(filelistHiL,1));
+for i = 1:size(filelistHiL,1)
+    xcorHLdiff(:,:,i) = (xcorHiL_peak(:,:,i) - xcorLoR_peak(:,:,i)) ./ (xcorHiL_peak(:,:,i) + xcorLoR_peak(:,:,i));
+    xcorLHdiff(:,:,i) = (xcorLoL_peak(:,:,i) - xcorHiR_peak(:,:,i)) ./ (xcorLoL_peak(:,:,i) + xcorHiR_peak(:,:,i));
+%     xcorHmLLdiff(:,:,i) = (xcorHiL_peak(:,:,i) - xcorLoL_peak(:,:,i)) ./ (xcorHiL_peak(:,:,i) + xcorLoL_peak(:,:,i));
+%     xcorHmLRdiff(:,:,i) = (xcorHiR_peak(:,:,i) - xcorLoR_peak(:,:,i)) ./ (xcorHiR_peak(:,:,i) + xcorLoR_peak(:,:,i));
+end
+
+% compute mean
+xcorHLdiff_mean = nanmean(xcorHLdiff,3);
+xcorLHdiff_mean = nanmean(xcorLHdiff,3);
+% xcorHmLLdiff_mean = nanmean(xcorHmLLdiff,3);
+% xcorHmLRdiff_mean = nanmean(xcorHmLRdiff,3);
+
+% topoplot
+load('Q:\MEG_data\20190724_b64d\190724\tfr_all');
+tfr_all.freq = 1;
+tfr_all.time = 1;
+tfr_all.dimord = 'chan_freq';
+for i=1:2
+    if i == 1
+        xcor_value = xcorHLdiff_mean';
+%         xcor_value = xcorHmLLdiff_mean';
+    elseif i == 2
+        xcor_value = xcorLHdiff_mean';
+%         xcor_value = xcorHmLRdiff_mean';
+    end
+
+    %replace values
+    tfr_all.powspctrm = xcor_value;
+    
+    %combine sensors
+    cfg             = [];
+    cfg.method      = 'sum';
+    tfr_all_c = ft_combineplanar(cfg,tfr_all);
+    
+    %topoplot
+    figure;
+    cfg                 = [];
+    cfg.zlim            = [-.7 .7] ;
+    cfg.layout          = 'neuromag306cmb.lay';
+    plot_mat = ft_topoplotER(cfg,tfr_all_c);
+    colormap jet
+end
+
+% compute difference of the difference
+xcordiff_diff = zeros(1,204,size(filelistHiL,1));
+for i = 1:size(filelistHiL,1)
+    xcordiff_diff(:,:,i) = (xcorHLdiff(:,:,i) - xcorLHdiff(:,:,i));% ./ (xcorHLdiff(:,:,i) + xcorLHdiff(:,:,i));
+end
+
+% compute mean
+xcordiff_diff_mean = nanmean(xcordiff_diff,3);
+
+% topoplot left > right
+load('Q:\MEG_data\20190724_b64d\190724\tfr_all');
+tfr_all.freq = 1;
+tfr_all.time = 1;
+tfr_all.dimord = 'chan_freq';
+%replace values
+tfr_all.powspctrm = xcordiff_diff_mean';
+%combine sensors
+cfg             = [];
+cfg.method      = 'sum';
+tfr_all_c = ft_combineplanar(cfg,tfr_all);
+%topoplot
+figure;
+cfg = [];
+cfg.zlim            = [-.7 .7] ;
+cfg.layout = 'neuromag306cmb.lay';
+ft_topoplotER(cfg,tfr_all_c)
+colormap jet
+
+
+%% Cross-correlation analysis 3 - BEST!
+clear
+
+% load xcorr data
+folder = 'Q:/MEG_data/';
+filelistL = dir(fullfile(folder, '**', 'xcorL3.mat'));
+filelistR = dir(fullfile(folder, '**', 'xcorR3.mat'));
+
+filelistHiL = filelistL([1 5 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition (sbj3 excluded)
+filelistLoR = filelistR([1 5 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition (sbj3 excluded)
+filelistLoL = filelistL([7 2 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition (sbj3 excluded)
+filelistHiR = filelistR([7 2 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition (sbj3 excluded)
+% %only leave participants with more than half of the trials left
+% filelistHiL = filelistHiL([1:3,5:8,10:11,13,15:19]);
+% filelistLoR = filelistLoR([1:3,5:8,10:11,13,15:19]);
+% filelistLoL = filelistLoL([1:3,5:8,10:11,13,15:19]);
+% filelistHiR = filelistHiR([1:3,5:8,10:11,13,15:19]);
+% %first session only
+% filelistHiL = filelistL([1 9 12 17 21 25 27 32 37]); %HIGH-LOW condition (sbj3 excluded)
+% filelistLoR = filelistR([1 9 12 17 21 25 27 32 37]); %HIGH-LOW condition (sbj3 excluded)
+% filelistLoL = filelistL([2 4 10 14 18 22 26 30 33 38]); %LOW-HIGH condition (sbj3 excluded)
+% filelistHiR = filelistR([2 4 10 14 18 22 26 30 33 38]); %LOW-HIGH condition (sbj3 excluded)
+
+xcorHiL_data = zeros(204,401,size(filelistHiL,1));
+xcorLoR_data = zeros(204,401,size(filelistLoR,1));
+xcorLoL_data = zeros(204,401,size(filelistLoL,1));
+xcorHiR_data = zeros(204,401,size(filelistHiR,1));
+for i = 1:size(filelistHiL,1)
+    xcorHiL_temp = load([filelistHiL(i).folder '\' filelistHiL(i).name]);
+    xcorHiL_data(:,:,i) = cell2mat(struct2cell(xcorHiL_temp));
+    xcorLoR_temp = load([filelistLoR(i).folder '\' filelistLoR(i).name]);
+    xcorLoR_data(:,:,i) = cell2mat(struct2cell(xcorLoR_temp));
+    xcorLoL_temp = load([filelistLoL(i).folder '\' filelistLoL(i).name]);
+    xcorLoL_data(:,:,i) = cell2mat(struct2cell(xcorLoL_temp));
+    xcorHiR_temp = load([filelistHiR(i).folder '\' filelistHiR(i).name]);
+    xcorHiR_data(:,:,i) = cell2mat(struct2cell(xcorHiR_temp));
+end
+
+% compute hilbert transform
+xcorHiL_hilb = zeros(401,204,size(filelistHiL,1));
+xcorLoR_hilb = zeros(401,204,size(filelistHiL,1));
+xcorLoL_hilb = zeros(401,204,size(filelistHiL,1));
+xcorHiR_hilb = zeros(401,204,size(filelistHiL,1));
+for i = 1:size(filelistHiL,1)
+    xcorHiL_hilb(:,:,i) = abs(hilbert(xcorHiL_data(:,:,i)'));
+    xcorLoR_hilb(:,:,i) = abs(hilbert(xcorLoR_data(:,:,i)'));
+    xcorLoL_hilb(:,:,i) = abs(hilbert(xcorLoL_data(:,:,i)'));
+    xcorHiR_hilb(:,:,i) = abs(hilbert(xcorHiR_data(:,:,i)'));
+end
+% save('xcor_data', 'xcorHiL_hilb', 'xcorLoR_hilb', 'xcorLoL_hilb', 'xcorHiR_hilb')
+% load('xcor_data', 'xcorHiL_hilb', 'xcorLoR_hilb', 'xcorLoL_hilb', 'xcorHiR_hilb')
+
+% % PLOT and SURF
+% pDelays = -200:1:200;
+% figure
+% subplot(221); plot(pDelays, mean(xcorHiL_hilb,3)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+% subplot(222); plot(pDelays, mean(xcorLoR_hilb,3)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+% subplot(223); plot(pDelays, mean(xcorLoL_hilb,3)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+% subplot(224); plot(pDelays, mean(xcorHiR_hilb,3)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+% 
+% % grand average
+% xcorL_ga = (mean(xcorHiL_hilb,3) + mean(xcorLoL_hilb,3))/2;
+% xcorR_ga = (mean(xcorLoR_hilb,3) + mean(xcorHiR_hilb,3))/2;
+% 
+% % figure
+% % subplot(121); plot(pDelays, xcorL_ga); ylim([0 .1]); xlabel('lag'); ylabel('correlation'); title('left');
+% % subplot(122); plot(pDelays, xcorR_ga); ylim([0 .1]); xlabel('lag'); ylabel('correlation'); title('right');
+% 
+% figure
+% surf(xcorL_ga, 'edgecolor', 'none')
+% xlim([1 204]); xlabel('MEG sensor'); xticklabels({})
+% ylim([1 401]); ylabel('Lag (ms)'); yticklabels([-100 0 100 200])
+% zlim([0 .08]); zlabel('Correlation (r)')
+% caxis([0 .07])
+% shading interp
+% colormap jet
+% set(gca,'Ydir','reverse')
+% set(gcf, 'renderer', 'painters')
+% figure
+% surf(xcorR_ga, 'edgecolor', 'none')
+% xlim([1 204]); xlabel('MEG sensor'); xticklabels({})
+% ylim([1 401]); ylabel('Lag (ms)'); yticklabels([-100 0 100 200])
+% zlim([0 .08]); zlabel('Correlation (r)')
+% caxis([0 .07])
+% shading interp
+% colormap jet
+% set(gca,'Ydir','reverse')
+% set(gcf, 'renderer', 'painters')
+
+% normalize
+xcorHiL_hilb_n = zeros(401,204,size(filelistHiL,1));
+xcorLoR_hilb_n = zeros(401,204,size(filelistHiL,1));
+xcorLoL_hilb_n = zeros(401,204,size(filelistHiL,1));
+xcorHiR_hilb_n = zeros(401,204,size(filelistHiL,1));
+for i = 1:size(filelistHiL,1)
+    minHi = min([xcorHiL_hilb(:,:,i), xcorLoR_hilb(:,:,i)],[],'all'); maxHL = max([xcorHiL_hilb(:,:,i), xcorLoR_hilb(:,:,i)],[],'all');
+    xcorHiL_hilb_n(:,:,i) = (xcorHiL_hilb(:,:,i) - minHi) / (maxHL - minHi);
+    xcorLoR_hilb_n(:,:,i) = (xcorLoR_hilb(:,:,i) - minHi) / (maxHL - minHi);
+    minHi = min([xcorLoL_hilb(:,:,i), xcorHiR_hilb(:,:,i)],[],'all'); maxHL = max([xcorLoL_hilb(:,:,i), xcorHiR_hilb(:,:,i)],[],'all');
+    xcorLoL_hilb_n(:,:,i) = (xcorLoL_hilb(:,:,i) - minHi) / (maxHL - minHi);
+    xcorHiR_hilb_n(:,:,i) = (xcorHiR_hilb(:,:,i) - minHi) / (maxHL - minHi);
+end
+
+% get peak value
+xcorHiL_peak = max(xcorHiL_hilb_n,[],1);
+xcorLoR_peak = max(xcorLoR_hilb_n,[],1);
+xcorLoL_peak = max(xcorLoL_hilb_n,[],1);
+xcorHiR_peak = max(xcorHiR_hilb_n,[],1);
+% % TOPOPLOT
+% % grand average
+% xcorL_peak_ga = (mean(xcorHiL_peak,3) + mean(xcorLoL_peak,3))/2;
+% xcorR_peak_ga = (mean(xcorLoR_peak,3) + mean(xcorHiR_peak,3))/2;
+% 
+% % prepare tfr template
+% %load('Q:\MEG_data\20190724_b64d\190724\tfr_all');
+% tfr_all.freq = 1;
+% tfr_all.time = 1;
+% tfr_all.dimord = 'chan_freq';
+% 
+% %replace values
+% xcorL = tfr_all;
+% xcorL.powspctrm = xcorL_peak_ga';
+% xcorR = tfr_all;
+% xcorR.powspctrm = xcorR_peak_ga';
+% 
+% %combine sensors
+% xcorL_c = ft_combineplanar_nocheck([],xcorL);
+% xcorR_c = ft_combineplanar_nocheck([],xcorR);
+% 
+% %topoplot
+% cfg                 = [];
+% cfg.zlim            = [0 1] ;
+% cfg.layout          = 'neuromag306cmb.lay';
+% cfg.comment         = 'no';
+% figure; ft_topoplotER(cfg,xcorL_c);
+% colorbar; colormap jet
+% figure; ft_topoplotER(cfg,xcorR_c);
+% colorbar; colormap jet
+
+% compute difference between stimuli
+xcorHLdiff = zeros(1,204,size(filelistHiL,1));
+xcorLHdiff = zeros(1,204,size(filelistHiL,1));
+% xcorHmLLdiff = zeros(1,204,size(filelistHiL,1));
+% xcorHmLRdiff = zeros(1,204,size(filelistHiL,1));
+for i = 1:size(filelistHiL,1)
+    xcorHLdiff(:,:,i) = (xcorHiL_peak(:,:,i) - xcorLoR_peak(:,:,i));% ./ (xcorHiL_peak(:,:,i) + xcorLoR_peak(:,:,i));
+    xcorLHdiff(:,:,i) = (xcorLoL_peak(:,:,i) - xcorHiR_peak(:,:,i));% ./ (xcorLoL_peak(:,:,i) + xcorHiR_peak(:,:,i));
+%     xcorHmLLdiff(:,:,i) = (xcorHiL_peak(:,:,i) - xcorLoL_peak(:,:,i));% ./ (xcorHiL_peak(:,:,i) + xcorLoL_peak(:,:,i));
+%     xcorHmLRdiff(:,:,i) = (xcorHiR_peak(:,:,i) - xcorLoR_peak(:,:,i));% ./ (xcorHiR_peak(:,:,i) + xcorLoR_peak(:,:,i));
+end
+% % TOPOPLOT
+% % grand average
+% xcordiff_ga = (mean(xcorHLdiff,3) + mean(xcorLHdiff,3))/2;
+% 
+% % load tfr template
+% %load('Q:\MEG_data\20190724_b64d\190724\tfr_all');
+% tfr_all.freq = 1;
+% tfr_all.time = 1;
+% tfr_all.dimord = 'chan_freq';
+% 
+% %replace values
+% xcorD = tfr_all;
+% xcorD.powspctrm = xcordiff_ga';
+% 
+% %combine sensors
+% xcorD_c = ft_combineplanar_nocheck([],xcorD);
+% 
+% %topoplot
+% cfg                 = [];
+% cfg.zlim            = [-.5 .5] ;
+% cfg.layout          = 'neuromag306cmb.lay';
+% cfg.comment         = 'no';
+% figure; ft_topoplotER(cfg,xcorD_c);
+% colorbar; colormap jet
+
+% select top sensor of each stimulus side (left/negative and right/positive)
+sens_nr = 1;
+xcorHLdiff_Rtop = zeros(1,sens_nr,size(filelistHiL,1));
+xcorHLdiff_Ltop = zeros(1,sens_nr,size(filelistHiL,1));
+xcorHLdiff_sel = zeros(1,204,size(filelistHiL,1));
+xcorLHdiff_Rtop = zeros(1,sens_nr,size(filelistHiL,1));
+xcorLHdiff_Ltop = zeros(1,sens_nr,size(filelistHiL,1));
+xcorLHdiff_sel = zeros(1,204,size(filelistHiL,1));
+for i = 1:size(filelistHiL,1)
+    xcorHLdiff_Rtop(:,:,i) = mink(xcorHLdiff(:,:,i),sens_nr); xcorHLdiff_Ltop(:,:,i) = maxk(xcorHLdiff(:,:,i),sens_nr);
+    xcorHLdiff_sel(:,:,i) = xcorHLdiff(:,:,i);
+    xcorHLdiff_sel(:,~ismember(xcorHLdiff_sel(:,:,i), [xcorHLdiff_Ltop(:,:,i), xcorHLdiff_Rtop(:,:,i)]),i) = 0;
+    xcorLHdiff_Rtop(:,:,i) = mink(xcorLHdiff(:,:,i),sens_nr); xcorLHdiff_Ltop(:,:,i) = maxk(xcorLHdiff(:,:,i),sens_nr);
+    xcorLHdiff_sel(:,:,i) = xcorLHdiff(:,:,i);
+    xcorLHdiff_sel(:,~ismember(xcorLHdiff_sel(:,:,i), [xcorLHdiff_Ltop(:,:,i), xcorLHdiff_Rtop(:,:,i)]),i) = 0;
+end
+% %using the difference as indexing
+% sens_nr = 1;
+% for i = 1:size(filelistHiL,1)
+%     [~, idx] = mink(xcorHLdiff(:,:,i),sens_nr);
+%     xcorHLdiff_Rtop(:,:,i) = xcorLoR_peak(:,idx,i);
+%     [~, idx] = maxk(xcorHLdiff(:,:,i),sens_nr);
+%     xcorHLdiff_Ltop(:,:,i) = xcorHiL_peak(:,idx,i);
+%     [~, idx] = mink(xcorLHdiff(:,:,i),sens_nr);
+%     xcorLHdiff_Rtop(:,:,i) = xcorHiR_peak(:,idx,i);
+%     [~, idx] = maxk(xcorLHdiff(:,:,i),sens_nr);
+%     xcorLHdiff_Ltop(:,:,i) = xcorLoL_peak(:,idx,i);
+% end
+% %without computing the difference
+% sens_nr = 1;
+% xcorHLdiff_Ltop = maxk(xcorHiL_peak,sens_nr);
+% xcorHLdiff_Rtop = maxk(xcorLoR_peak,sens_nr);
+% xcorLHdiff_Ltop = maxk(xcorLoL_peak,sens_nr);
+% xcorLHdiff_Rtop = maxk(xcorHiR_peak,sens_nr);
+
+
+% idxHLdiff_top = zeros(sens_nr*2,9); idxLHdiff_top = zeros(sens_nr*2,9);
+% for i = 1:size(filelistHiL,1)
+%     idxHLdiff_top(:,i) = find(xcorHLdiff_sel(:,:,i) ~= 0);
+%     idxLHdiff_top(:,i) = find(xcorLHdiff_sel(:,:,i) ~= 0);
+% end
+% figure; subplot(211); histogram(idxHLdiff_top(:),'BinWidth',1); xlim([1 204]); xlabel('channels'); ylabel('# of occurrences')
+% subplot(212); histogram(idxLHdiff_top(:),'BinWidth',1); xlim([1 204]); xlabel('channels'); ylabel('# of occurrences')
+% % topoplot
+% load('Q:\MEG_data\20190724_b64d\190724\tfr_all');
+% tfr_all.freq = 1;
+% tfr_all.time = 1;
+% tfr_all.dimord = 'chan_freq';
+% for ii=1:19
+%     for i=1:2
+%         if i == 1
+%             xcor_value = squeeze(xcorHLdiff_sel(:,:,ii));
+%         elseif i == 2
+%             xcor_value = squeeze(xcorLHdiff_sel(:,:,ii));
+%         end
+% 
+%         %replace values
+%         tfr_all.powspctrm = xcor_value';
+% 
+%         %combine sensors
+%         cfg             = [];
+%         cfg.method      = 'sum';
+%         tfr_all_c = ft_combineplanar(cfg,tfr_all);
+% 
+%         %topoplot
+%         figure;
+%         cfg                 = [];
+%         cfg.zlim            = [-.5 .5] ;
+%         cfg.layout          = 'neuromag306cmb.lay';
+%         plot_mat = ft_topoplotER(cfg,tfr_all_c);
+%         colormap jet
+%     end
+% end
+
+% compute mean
+xcorHLdiff_Rtop_sbj = mean(xcorHLdiff_Rtop,2);
+xcorHLdiff_Rtop_mean = mean(xcorHLdiff_Rtop_sbj,3);
+xcorHLdiff_Rtop_sem = std(xcorHLdiff_Rtop_sbj,[],3)/sqrt(size(filelistHiL,1));
+xcorHLdiff_Ltop_sbj = mean(xcorHLdiff_Ltop,2);
+xcorHLdiff_Ltop_mean = mean(xcorHLdiff_Ltop_sbj,3);
+xcorHLdiff_Ltop_sem = std(xcorHLdiff_Ltop_sbj,[],3)/sqrt(size(filelistHiL,1));
+% xcorHLdiff_sel_mean = mean(xcorHLdiff_sel,3);
+
+xcorLHdiff_Rtop_sbj = mean(xcorLHdiff_Rtop,2);
+xcorLHdiff_Rtop_mean = mean(xcorLHdiff_Rtop_sbj,3);
+xcorLHdiff_Rtop_sem = std(xcorLHdiff_Rtop_sbj,[],3)/sqrt(size(filelistHiL,1));
+xcorLHdiff_Ltop_sbj = mean(xcorLHdiff_Ltop,2);
+xcorLHdiff_Ltop_mean = mean(xcorLHdiff_Ltop_sbj,3);
+xcorLHdiff_Ltop_sem = std(xcorLHdiff_Ltop_sbj,[],3)/sqrt(size(filelistHiL,1));
+% xcorLHdiff_sel_mean = mean(xcorLHdiff_sel,3);
+% data_for_rmanova = [squeeze(abs(xcorHLdiff_Rtop_sbj)) squeeze(abs(xcorHLdiff_Ltop_sbj)) squeeze(abs(xcorLHdiff_Rtop_sbj)) squeeze(abs(xcorLHdiff_Ltop_sbj))];
+
+% % plot (posterRAW)
+% figure; bar([xcorHLdiff_Ltop_mean,abs(xcorHLdiff_Rtop_mean);xcorLHdiff_Ltop_mean,abs(xcorLHdiff_Rtop_mean)]);
+% xticklabels({'High-Left   Low-Right','Low-Left   High-Right'}); ylim([0 .6]); ylabel('Correlation');
+% hold on;
+% errorbar([xcorHLdiff_Ltop_mean,abs(xcorHLdiff_Rtop_mean);xcorLHdiff_Ltop_mean,abs(xcorLHdiff_Rtop_mean)],...
+%     [xcorHLdiff_Ltop_sem,xcorLHdiff_Ltop_sem;xcorHLdiff_Rtop_sem,xcorLHdiff_Rtop_sem],...
+%     'k','LineStyle','none');
+
+
+
+% Plot for Fig. 4 of the paper [part 1]
+username = getenv('USERNAME');
+addpath(['C:\Users\' username '\OneDrive - University of Birmingham\UoB\Scripts\Violinplot'])
+
+% plot xcor by condition (hemi x probability)
+f1 = figure('Units', 'centimeters', 'Position', [5,5,8,8]);
+subplot(221)
+xcorHLdiff_sbj = [squeeze(xcorHLdiff_Ltop_sbj), squeeze(xcorLHdiff_Ltop_sbj),...
+    squeeze(-xcorLHdiff_Rtop_sbj), squeeze(-xcorHLdiff_Rtop_sbj)];
+vp = violinplot(xcorHLdiff_sbj, [], 'ShowMean', true);
+xlim([0.5,4.5]); xlabel('Distractor probability'); xticklabels({'high', 'low', 'high', 'low'});
+ylim([0 1.1]); ylabel('Frequency tagging response');
+legend('left','right','FontSize',6); legend boxoff
+ax = gca;
+ax.FontSize = 6;
+% set colours
+vp(1, 1).ViolinColor = [0.3010    0.7450    0.9330];
+vp(1, 2).ViolinColor = [0.3010    0.7450    0.9330];
+vp(1, 3).ViolinColor = [0.8500    0.3250    0.0980];
+vp(1, 4).ViolinColor = [0.8500    0.3250    0.0980];
+% plot line between each subject data point
+x1 = vp(1,1).ScatterPlot.XData;
+y1 = vp(1,1).ScatterPlot.YData;
+x2 = vp(1,2).ScatterPlot.XData;
+y2 = vp(1,2).ScatterPlot.YData;
+plot([x1; x2],[y1; y2],'Color',[.8 .8 .8],'linewidth',0.5)
+x3 = vp(1,3).ScatterPlot.XData;
+y3 = vp(1,3).ScatterPlot.YData;
+x4 = vp(1,4).ScatterPlot.XData;
+y4 = vp(1,4).ScatterPlot.YData;
+plot([x3; x4],[y3; y4],'Color',[.8 .8 .8],'linewidth',0.5)
+% add legend
+hleglines = [vp(1, 1).ViolinPlot, vp(1, 3).ViolinPlot];
+legend(hleglines, {'left', 'right'},'Location','northeast')
+legend('boxoff')
+
+% % plot w\ subjects
+% figure('Units', 'centimeters', 'Position', [5,5,8,4], 'units', 'centimeters'), hold on
+% plot(1:2,[squeeze(xcorHLdiff_Ltop_sbj),squeeze(abs(xcorHLdiff_Rtop_sbj))],'--k');
+% h1 = plot(1,[squeeze(xcorHLdiff_Ltop_sbj)],'.b');
+% h2 = plot(2,[squeeze(abs(xcorHLdiff_Rtop_sbj))],'.r');
+% plot(1:2,[mean(squeeze(xcorHLdiff_Ltop_sbj)),mean(squeeze(abs(xcorHLdiff_Rtop_sbj)))],'k','LineWidth',2);
+% plot(3:4,[squeeze(abs(xcorLHdiff_Rtop_sbj)),squeeze(xcorLHdiff_Ltop_sbj)],'--k');
+% plot(3,[squeeze(abs(xcorLHdiff_Rtop_sbj))],'.r');
+% plot(4,[squeeze(xcorLHdiff_Ltop_sbj)],'.b');
+% plot(3:4,[mean(squeeze(abs(xcorLHdiff_Rtop_sbj))),mean(squeeze(xcorLHdiff_Ltop_sbj))],'k','LineWidth',2); hold off;
+% xlim([0.5,4.5]); xlabel('Distractor probability'); xticklabels({'high', 'low', 'high', 'low'});
+% ylim([0 1.1]); ylabel('Frequency tagging response');
+% legend([h1(1), h2(1)],'left','right','FontSize',6); legend boxoff
+% ax = gca;
+% ax.FontSize = 6;
+
+% [h,p] = ttest(abs(xcorHLdiff_Ltop_sbj), abs(xcorHLdiff_Rtop_sbj)) %t-test
+% [h,p] = ttest(abs(xcorLHdiff_Rtop_sbj), abs(xcorLHdiff_Ltop_sbj)) %t-test
+% [h,p] = ttest(abs(xcorHLdiff_Ltop_sbj), abs(xcorLHdiff_Ltop_sbj)) %t-test
+% [h,p] = ttest(abs(xcorLHdiff_Rtop_sbj), abs(xcorHLdiff_Rtop_sbj)) %t-test
+
+% compute difference
+xcorH_sbj = mean([xcorHLdiff_Ltop_sbj, -xcorLHdiff_Rtop_sbj],2);
+xcorH_sbj = squeeze(xcorH_sbj);
+xcorL_sbj = mean([-xcorHLdiff_Rtop_sbj, xcorLHdiff_Ltop_sbj],2);
+xcorL_sbj = squeeze(xcorL_sbj);
+
+% statistics
+addpath('C:\Users\ferranto\DataShare\UoB\Scripts\Bayes_factor')
+addpath('C:\Users\ferranto\DataShare\UoB\Scripts\Cohens_d')
+[~,p,~,stats] = ttest(xcorH_sbj, xcorL_sbj) %t-test
+d_HiLo = computeCohen_d(xcorH_sbj, xcorL_sbj, 'paired')
+% [bf10,~] = bf.ttest(xcorH_sbj, xcorL_sbj)
+
+% descriptives
+xcorH_mean = mean(xcorH_sbj)
+xcorH_sem = std(xcorH_sbj) / sqrt(length(xcorH_sbj))
+xcorL_mean = mean(xcorL_sbj)
+xcorL_sem = std(xcorL_sbj) / sqrt(length(xcorL_sbj))
+
+% % plot v2
+% figure; bar([xcorH_mean xcorL_mean],'FaceColor',[0.47,0.67,0.19]);
+% xticklabels({'High','Low'}); ylabel('Correlation'); ylim([0 .6]);%ylim([-.4 .4]);
+% hold on;
+% errorbar(1:2, [xcorH_mean xcorL_mean], [xcorH_sem xcorL_sem],'color',[0,0,0],'LineStyle','none'); %'color',[0.47,0.67,0.19]
+
+
+
+% Plot for Fig. 4 of the paper [part 2]
+% plot xcor probability effect (across hemi)
+figure(f1)
+subplot(222)
+xcor_sbj = squeeze(xcorL_sbj) - squeeze(xcorH_sbj);
+violinplot(xcor_sbj, [], 'ShowMean', true); hold on
+yline(0, '--'); hold off
+xlim([0.5,1.5]); xticklabels('low-high');
+ylim([-.15 .35]); ylabel('SL effect (norm corr)');
+ax = gca;
+ax.FontSize = 6;
+
+
+
+% % plot w\ subjects
+% figure('Units', 'centimeters', 'Position', [5,5,4,4], 'units', 'centimeters'), hold on
+% plot([squeeze(xcorH_sbj), squeeze(xcorL_sbj)]','--k');
+% plot([mean(squeeze(xcorH_sbj)), mean(squeeze(xcorL_sbj))]','k','LineWidth',2);
+% xlim([0.5,2.5]); xticks([1,2]); xlabel('Distractor probability'); xticklabels({'High','Low'});
+% ylim([0 1]); ylabel('Frequency tagging response');
+% ax = gca;
+% ax.FontSize = 6;
+
+
+%% Correlation behaviour-bft-alpha --- load data first ----
+
+beh_data = sbj_av_drt(:,[1:2,4:20]); %RTs
+beh_data_diff = beh_data(2,:)' - beh_data(1,:)';
+% beh_data = sbj_ov_dacc(:,[1:2,4:20]); %Accuracy
+% beh_data_diff = beh_data(2,:)' - beh_data(1,:)';
+% beh_data = sbj_ov_dies(:,[1:2,4:20]); %IES
+% beh_data_diff = beh_data(2,:)' - beh_data(1,:)';
+
+bft_data_diff = squeeze(xcorL_sbj - xcorH_sbj);
+
+alpha_data_diff = alpha_contraHi - alpha_contraLo;
+alpha_data_diff = alpha_data_diff([1:2,4:20]);
+
+% correlation behaviour-bft
+[rho,pval] = corr(beh_data_diff,bft_data_diff,'type','pearson')
+figure(); plot(beh_data_diff,bft_data_diff,'xk','MarkerSize',12); hold on; hl = lsline; set(hl,'linewidth',2);
+xlabel('SL effect on RTs'); ylabel('SL effect on RIFT')
+% %lsline slope and intecept (figure must be open)
+% B = [ones(size(hl.XData(:))), hl.XData(:)]\hl.YData(:);
+% Slope = B(2)
+% Intercept = B(1)
+% corrplot([beh_data_diff,bft_data_diff])
+
+% correlation behaviour-alpha
+[rho,pval] = corr(beh_data_diff,alpha_data_diff,'type','pearson')
+figure('Position', [100 600 260 225]); plot(beh_data_diff,alpha_data_diff,'xk','MarkerSize',12); hold on; hl = lsline; set(hl,'linewidth',2);
+xlabel('SL effect on RTs'); ylabel('SL effect on alpha')
+
+% correlation bft-alpha
+[rho,pval] = corr(bft_data_diff,alpha_data_diff,'type','pearson')
+figure('Position', [100 600 260 225]); plot(bft_data_diff,alpha_data_diff,'xk','MarkerSize',12); hold on; hl = lsline; set(hl,'linewidth',2);
+xlabel('SL effect on BFT'); ylabel('SL effect on alpha')
+
+
+%% Multiple linear regression --- load data first ----
+% 
+% %RTs
+% rt_data = sbj_ov_drt(:,[1:2,4:20]); 
+% rt_data_diff = rt_data(2,:)' - rt_data(1,:)';
+% %accuracy
+% acc_data = sbj_ov_dacc(:,[1:2,4:20]); 
+% acc_data_diff = acc_data(2,:)' - acc_data(1,:)';
+% %IES
+% ies_data = sbj_ov_dies(:,[1:2,4:20]); 
+% ies_data_diff = ies_data(2,:)' - ies_data(1,:)';
+% 
+% %frequency tagging
+% xcorLeft_sbj = squeeze(xcorHLdiff_Ltop_sbj - xcorLHdiff_Ltop_sbj);
+% xcorRight_sbj = squeeze(abs(xcorHLdiff_Rtop_sbj) - abs(xcorLHdiff_Rtop_sbj));
+% bft_data_diff = xcorRight_sbj - xcorLeft_sbj;
+% 
+% %alpha
+% alpha_data_diff = powspctrm_rightpost_sbj - powspctrm_leftpost_sbj;
+% alpha_data_diff = alpha_data_diff([1:2,4:20]);
+% 
+% 
+% % regression
+% y = 
+% [b,bint,r,rint,stats] = regress(y,X)
+
+
+%% Cross-correlation analysis 3 - keep trials
+clear
+
+% set folder and select files
+folder = 'Q:/MEG_data/';
+% filelistL = dir(fullfile(folder, '**', 'xcorLkt.mat'));
+% filelistR = dir(fullfile(folder, '**', 'xcorRkt.mat'));
+filelistL = dir(fullfile(folder, '**', 'xcorLkt3.mat')); %eye-tracking controled
+filelistR = dir(fullfile(folder, '**', 'xcorRkt3.mat')); %eye-tracking controled
+
+filelistHiL = filelistL([1 5 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition (sbj3 excluded)
+filelistLoR = filelistR([1 5 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition (sbj3 excluded)
+filelistLoL = filelistL([7 2 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition (sbj3 excluded)
+filelistHiR = filelistR([7 2 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition (sbj3 excluded)
+% filelistHiL = filelistHiL([1:3,5:8,10:11,13,15:19]); %only leave participants with more than half of the trials left
+% filelistLoR = filelistLoR([1:3,5:8,10:11,13,15:19]);
+% filelistLoL = filelistLoL([1:3,5:8,10:11,13,15:19]);
+% filelistHiR = filelistHiR([1:3,5:8,10:11,13,15:19]);
+
+% % load data and average across trials
+% xcorHiL_data = zeros(204,401,size(filelistHiL,1));
+% xcorLoR_data = zeros(204,401,size(filelistLoR,1));
+% xcorLoL_data = zeros(204,401,size(filelistLoL,1));
+% xcorHiR_data = zeros(204,401,size(filelistHiR,1));
+% for i = 1:size(filelistHiL,1)
+%     fprintf(1,'#%d\n',i);
+%     xcorHiL_temp = load([filelistHiL(i).folder '\' filelistHiL(i).name]);
+%     %ntrialHiL(i) = size(xcorHiL_temp.xcorL,3);
+%     xcorHiL_data(:,:,i) = mean(xcorHiL_temp.xcorL,3);
+%     xcorLoR_temp = load([filelistLoR(i).folder '\' filelistLoR(i).name]);
+%     xcorLoR_data(:,:,i) = mean(xcorLoR_temp.xcorR,3);
+%     xcorLoL_temp = load([filelistLoL(i).folder '\' filelistLoL(i).name]);
+%     xcorLoL_data(:,:,i) = mean(xcorLoL_temp.xcorL,3);
+%     xcorHiR_temp = load([filelistHiR(i).folder '\' filelistHiR(i).name]);
+%     %ntrialHiR(i) = size(xcorHiR_temp.xcorR,3);
+%     xcorHiR_data(:,:,i) = mean(xcorHiR_temp.xcorR,3);
+% end
+% % save('Q:\MEG_data\xcor_HiL_kt3','xcorHiL_data');
+% % save('Q:\MEG_data\xcor_LoR_kt3','xcorLoR_data');
+% % save('Q:\MEG_data\xcor_LoL_kt3','xcorLoL_data');
+% % save('Q:\MEG_data\xcor_HiR_kt3','xcorHiR_data');
+load('Q:\MEG_data\xcor_HiL_kt3');
+load('Q:\MEG_data\xcor_LoR_kt3');
+load('Q:\MEG_data\xcor_LoL_kt3');
+load('Q:\MEG_data\xcor_HiR_kt3');
+
+% compute hilbert transform
+xcorHiL_hilb = zeros(401,204,size(filelistHiL,1));
+xcorLoR_hilb = zeros(401,204,size(filelistHiL,1));
+xcorLoL_hilb = zeros(401,204,size(filelistHiL,1));
+xcorHiR_hilb = zeros(401,204,size(filelistHiL,1));
+for i = 1:size(filelistHiL,1)
+    xcorHiL_hilb(:,:,i) = abs(hilbert(xcorHiL_data(:,:,i)'));
+    xcorLoR_hilb(:,:,i) = abs(hilbert(xcorLoR_data(:,:,i)'));
+    xcorLoL_hilb(:,:,i) = abs(hilbert(xcorLoL_data(:,:,i)'));
+    xcorHiR_hilb(:,:,i) = abs(hilbert(xcorHiR_data(:,:,i)'));
+end
+% pDelays = -200:1:200;
+% figure; subplot(221); plot(pDelays, xcorHiL_hilb(:,:,1)); ylim([-.2 .2]); xlabel('lag'); ylabel('correlation'); hold on;
+% plot(pDelays, xcorHiL_data(:,:,1)); ylim([-.2 .2]); xlabel('lag'); ylabel('correlation'); hold on;
+% subplot(222); plot(pDelays, xcorLoR_hilb(:,:,1)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+% subplot(223); plot(pDelays, xcorLoL_hilb(:,:,1)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+% subplot(224); plot(pDelays, xcorHiR_hilb(:,:,1)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+
+% % normalize
+% xcorHiL_hilb_n = zeros(401,204,size(filelistHiL,1));
+% xcorLoR_hilb_n = zeros(401,204,size(filelistHiL,1));
+% xcorLoL_hilb_n = zeros(401,204,size(filelistHiL,1));
+% xcorHiR_hilb_n = zeros(401,204,size(filelistHiL,1));
+% for i = 1:size(filelistHiL,1)
+%     minHi = min([xcorHiL_hilb(:,:,i), xcorLoR_hilb(:,:,i)],[],'all'); maxHL = max([xcorHiL_hilb(:,:,i), xcorLoR_hilb(:,:,i)],[],'all');
+%     xcorHiL_hilb_n(:,:,i) = (xcorHiL_hilb(:,:,i) - minHi) / (maxHL - minHi);
+%     xcorLoR_hilb_n(:,:,i) = (xcorLoR_hilb(:,:,i) - minHi) / (maxHL - minHi);
+%     minHi = min([xcorLoL_hilb(:,:,i), xcorHiR_hilb(:,:,i)],[],'all'); maxHL = max([xcorLoL_hilb(:,:,i), xcorHiR_hilb(:,:,i)],[],'all');
+%     xcorLoL_hilb_n(:,:,i) = (xcorLoL_hilb(:,:,i) - minHi) / (maxHL - minHi);
+%     xcorHiR_hilb_n(:,:,i) = (xcorHiR_hilb(:,:,i) - minHi) / (maxHL - minHi);
+% end
+% % figure(1); figure(2); pDelays = -200:1:200;
+% % for i = 1:size(filelistHiL,1)
+% %     figure(1)
+% %     subplot(4,10,i*2-1); plot(pDelays, xcorHiL_hilb_n(:,:,i)); ylim([0 1]); xlabel('lag'); ylabel('correlation');
+% %     subplot(4,10,i*2); plot(pDelays, xcorLoR_hilb_n(:,:,i)); ylim([0 1]); xlabel('lag'); ylabel('correlation');
+% %     figure(2)
+% %     subplot(4,10,i*2-1); plot(pDelays, xcorLoL_hilb_n(:,:,i)); ylim([0 1]); xlabel('lag'); ylabel('correlation');
+% %     subplot(4,10,i*2); plot(pDelays, xcorHiR_hilb_n(:,:,i)); ylim([0 1]); xlabel('lag'); ylabel('correlation');
+% % end
+
+% get peak value
+xcorHiL_peak = max(xcorHiL_hilb,[],1);
+xcorLoR_peak = max(xcorLoR_hilb,[],1);
+xcorLoL_peak = max(xcorLoL_hilb,[],1);
+xcorHiR_peak = max(xcorHiR_hilb,[],1);
+% figure(1); figure(2);
+% for i = 1:size(filelistHiL,1)
+%     figure(1)
+%     subplot(4,10,i*2-1); plot(xcorHiL_peak(:,:,i)); ylim([0 1]); xlim([1 204]); xlabel('channels'); ylabel('correlation');
+%     subplot(4,10,i*2); plot(xcorLoR_peak(:,:,i)); ylim([0 1]); xlim([1 204]); xlabel('channels'); ylabel('correlation');
+%     figure(2)
+%     subplot(4,10,i*2-1); plot(xcorLoL_peak(:,:,i)); ylim([0 1]); xlim([1 204]); xlabel('channels'); ylabel('correlation');
+%     subplot(4,10,i*2); plot(xcorHiR_peak(:,:,i)); ylim([0 1]); xlim([1 204]); xlabel('channels'); ylabel('correlation');
+% end
+
+% compute difference between stimuli
+xcorHLdiff = zeros(1,204,size(filelistHiL,1));
+xcorLHdiff = zeros(1,204,size(filelistHiL,1));
+% xcorHmLLdiff = zeros(1,204,size(filelistHiL,1));
+% xcorHmLRdiff = zeros(1,204,size(filelistHiL,1));
+for i = 1:size(filelistHiL,1)
+    xcorHLdiff(:,:,i) = (xcorHiL_peak(:,:,i) - xcorLoR_peak(:,:,i));% ./ (xcorHiL_peak(:,:,i) + xcorLoR_peak(:,:,i));
+    xcorLHdiff(:,:,i) = (xcorLoL_peak(:,:,i) - xcorHiR_peak(:,:,i));% ./ (xcorLoL_peak(:,:,i) + xcorHiR_peak(:,:,i));
+%     xcorHmLLdiff(:,:,i) = (xcorHiL_peak(:,:,i) - xcorLoL_peak(:,:,i));% ./ (xcorHiL_peak(:,:,i) + xcorLoL_peak(:,:,i));
+%     xcorHmLRdiff(:,:,i) = (xcorHiR_peak(:,:,i) - xcorLoR_peak(:,:,i));% ./ (xcorHiR_peak(:,:,i) + xcorLoR_peak(:,:,i));
+end
+% figure;
+% for i = 1:size(filelistHiL,1)
+%     subplot(4,10,i*2-1); plot(xcorHLdiff(:,:,i)); ylim([-1 1]); xlim([1 204]); xlabel('channels'); ylabel('correlation');
+%     subplot(4,10,i*2); plot(xcorLHdiff(:,:,i)); ylim([-1 1]); xlim([1 204]); xlabel('channels'); ylabel('correlation');
+% end
+
+% select top sensors of each stimulus side (left/negative and right/positive)
+sens_nr = 3;
+xcorHLdiff_Rtop = zeros(1,sens_nr,size(filelistHiL,1));
+xcorHLdiff_Ltop = zeros(1,sens_nr,size(filelistHiL,1));
+xcorHLdiff_sel = zeros(1,204,size(filelistHiL,1));
+xcorLHdiff_Rtop = zeros(1,sens_nr,size(filelistHiL,1));
+xcorLHdiff_Ltop = zeros(1,sens_nr,size(filelistHiL,1));
+xcorLHdiff_sel = zeros(1,204,size(filelistHiL,1));
+for i = 1:size(filelistHiL,1)
+    xcorHLdiff_Rtop(:,:,i) = mink(xcorHLdiff(:,:,i),sens_nr); xcorHLdiff_Ltop(:,:,i) = maxk(xcorHLdiff(:,:,i),sens_nr);
+    xcorHLdiff_sel(:,:,i) = xcorHLdiff(:,:,i);
+    xcorHLdiff_sel(:,~ismember(xcorHLdiff_sel(:,:,i), [xcorHLdiff_Ltop(:,:,i), xcorHLdiff_Rtop(:,:,i)]),i) = 0;
+    xcorLHdiff_Rtop(:,:,i) = mink(xcorLHdiff(:,:,i),sens_nr); xcorLHdiff_Ltop(:,:,i) = maxk(xcorLHdiff(:,:,i),sens_nr);
+    xcorLHdiff_sel(:,:,i) = xcorLHdiff(:,:,i);
+    xcorLHdiff_sel(:,~ismember(xcorLHdiff_sel(:,:,i), [xcorLHdiff_Ltop(:,:,i), xcorLHdiff_Rtop(:,:,i)]),i) = 0;
+end
+% %using the difference as indexing
+% sens_nr = 3;
+% for i = 1:size(filelistHiL,1)
+%     [~, idx] = mink(xcorHLdiff(:,:,i),sens_nr);
+%     xcorHLdiff_Rtop(:,:,i) = xcorLoR_peak(:,idx,i);
+%     [~, idx] = maxk(xcorHLdiff(:,:,i),sens_nr);
+%     xcorHLdiff_Ltop(:,:,i) = xcorHiL_peak(:,idx,i);
+%     [~, idx] = mink(xcorLHdiff(:,:,i),sens_nr);
+%     xcorLHdiff_Rtop(:,:,i) = xcorHiR_peak(:,idx,i);
+%     [~, idx] = maxk(xcorLHdiff(:,:,i),sens_nr);
+%     xcorLHdiff_Ltop(:,:,i) = xcorLoL_peak(:,idx,i);
+% end
+% %without computing the difference
+% sens_nr = 3;
+% xcorHLdiff_Ltop = maxk(xcorHiL_peak,sens_nr);
+% xcorHLdiff_Rtop = maxk(xcorLoR_peak,sens_nr);
+% xcorLHdiff_Ltop = maxk(xcorLoL_peak,sens_nr);
+% xcorLHdiff_Rtop = maxk(xcorHiR_peak,sens_nr);
+
+% compute mean
+xcorHLdiff_Rtop_sbj = mean(xcorHLdiff_Rtop,2);
+% xcorHLdiff_Rtop_mean = mean(xcorHLdiff_Rtop_sbj,3);
+% xcorHLdiff_Rtop_sem = std(xcorHLdiff_Rtop_sbj,[],3)/sqrt(size(filelistHiL,1));
+xcorHLdiff_Ltop_sbj = mean(xcorHLdiff_Ltop,2);
+% xcorHLdiff_Ltop_mean = mean(xcorHLdiff_Ltop_sbj,3);
+% xcorHLdiff_Ltop_sem = std(xcorHLdiff_Ltop_sbj,[],3)/sqrt(size(filelistHiL,1));
+% xcorHLdiff_sel_mean = mean(xcorHLdiff_sel,3);
+
+xcorLHdiff_Rtop_sbj = mean(xcorLHdiff_Rtop,2);
+% xcorLHdiff_Rtop_mean = mean(xcorLHdiff_Rtop_sbj,3);
+% xcorLHdiff_Rtop_sem = std(xcorLHdiff_Rtop_sbj,[],3)/sqrt(size(filelistHiL,1));
+xcorLHdiff_Ltop_sbj = mean(xcorLHdiff_Ltop,2);
+% xcorLHdiff_Ltop_mean = mean(xcorLHdiff_Ltop_sbj,3);
+% xcorLHdiff_Ltop_sem = std(xcorLHdiff_Ltop_sbj,[],3)/sqrt(size(filelistHiL,1));
+% xcorLHdiff_sel_mean = mean(xcorLHdiff_sel,3);
+
+% plot v1
+% figure; bar([xcorHLdiff_Ltop_mean,xcorLHdiff_Ltop_mean;abs(xcorHLdiff_Rtop_mean),abs(xcorLHdiff_Rtop_mean)]);
+% xticklabels({'High-Left   Low-Right','Low-Left   High-Right'}); ylim([0 .06]); ylabel('Correlation');
+% hold on;
+% errorbar([xcorHLdiff_Ltop_mean,xcorLHdiff_Ltop_mean;abs(xcorHLdiff_Rtop_mean),abs(xcorLHdiff_Rtop_mean)],...
+%     [xcorHLdiff_Ltop_sem,xcorLHdiff_Ltop_sem;xcorHLdiff_Rtop_sem,xcorLHdiff_Rtop_sem],...
+%     'k','LineStyle','none');
+
+% [h,p] = ttest(xcorHLdiff_Ltop_sbj, -xcorHLdiff_Rtop_sbj) %t-test
+% [h,p] = ttest(xcorLHdiff_Rtop_sbj, -xcorLHdiff_Ltop_sbj) %t-test
+% [h,p] = ttest(xcorHLdiff_Ltop_sbj, xcorLHdiff_Ltop_sbj) %t-test
+% [h,p] = ttest(xcorLHdiff_Rtop_sbj, xcorHLdiff_Rtop_sbj) %t-test
+
+% compute difference
+xcorH_sbj = mean([abs(xcorHLdiff_Ltop_sbj), abs(xcorLHdiff_Rtop_sbj)],2);
+xcorL_sbj = mean([abs(xcorHLdiff_Rtop_sbj), abs(xcorLHdiff_Ltop_sbj)],2);
+
+[~,p,~,stats] = ttest(xcorH_sbj, xcorL_sbj) %t-test
+
+% xcorH_mean = mean(xcorH_sbj,3);
+% xcorH_sem = std(xcorH_sbj,[],3) / sqrt(size(filelistHiL,1));
+% xcorL_mean = mean(xcorL_sbj,3);
+% xcorL_sem = std(xcorL_sbj,[],3) / sqrt(size(filelistHiL,1));
+
+% % plot v2
+% figure; bar([xcorH_mean xcorL_mean],'FaceColor',[0.47,0.67,0.19]); hold on;
+% errorbar(1:2, [xcorH_mean xcorL_mean], [xcorH_sem xcorL_sem],'color',[0.47,0.67,0.19],'LineStyle','none');
+% xticklabels({'High','Low'}); ylabel('Correlation'); ylim([0 .06]);%ylim([-.4 .4]);
+
+
+% Plot as Fig. 4 of the paper [part 1]
+username = getenv('USERNAME');
+addpath(['C:\Users\' username '\OneDrive - University of Birmingham\UoB\Scripts\Violinplot'])
+% plot xcor by condition (hemi x probability)
+f1 = figure('Units', 'centimeters', 'Position', [5,5,8,8]);
+subplot(221)
+xcorHLdiff_sbj = [squeeze(xcorHLdiff_Ltop_sbj), squeeze(xcorLHdiff_Ltop_sbj),...
+    squeeze(-xcorLHdiff_Rtop_sbj), squeeze(-xcorHLdiff_Rtop_sbj)];
+violinplot(xcorHLdiff_sbj, [], 'ShowMean', true)
+xlim([0.5,4.5]); xlabel('Distractor probability'); xticklabels({'high', 'low', 'high', 'low'});
+ylabel('Frequency tagging response');
+legend('left','right','FontSize',6); legend boxoff
+ax = gca;
+ax.FontSize = 6;
+
+% Plot for Fig. 4 of the paper [part 2]
+% plot xcor probability effect (across hemi)
+figure(f1)
+subplot(222)
+xcor_sbj = squeeze(xcorL_sbj) - squeeze(xcorH_sbj);
+violinplot(xcor_sbj, [], 'ShowMean', true); hold on
+yline(0, '--'); hold off
+xlim([0.5,1.5]); xticklabels('low-high');
+ylabel('SL effect (norm corr)');
+ax = gca;
+ax.FontSize = 6;
+
+
+%% Cross-correlation analysis 4 - keep trials (split session in 3 parts)
+
+clear
+
+% set folder and select files
+folder = 'Q:/MEG_data/';
+% filelistL = dir(fullfile(folder, '**', 'xcorLkt.mat'));
+% filelistR = dir(fullfile(folder, '**', 'xcorRkt.mat'));
+filelistL = dir(fullfile(folder, '**', 'xcorLkt3.mat')); %eye-tracking controled
+filelistR = dir(fullfile(folder, '**', 'xcorRkt3.mat')); %eye-tracking controled
+
+filelistHiL = filelistL([1 5 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition (sbj3 excluded)
+filelistLoR = filelistR([1 5 8  9 13 12 16 17 20 21 24 25 29 27 34 32 36 37 40]); %HIGH-LOW condition (sbj3 excluded)
+filelistLoL = filelistL([7 2 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition (sbj3 excluded)
+filelistHiR = filelistR([7 2 4 11 10 15 14 19 18 23 22 28 26 31 30 35 33 39 38]); %LOW-HIGH condition (sbj3 excluded)
+% filelistHiL = filelistHiL([1:3,5:8,10:11,13,15:19]); %only leave participants with more than half of the trials left
+% filelistLoR = filelistLoR([1:3,5:8,10:11,13,15:19]);
+% filelistLoL = filelistLoL([1:3,5:8,10:11,13,15:19]);
+% filelistHiR = filelistHiR([1:3,5:8,10:11,13,15:19]);
+nsubj = size(filelistHiL,1);
+
+% % load data
+% xcorHiL_data = cell(nsubj,1);
+% xcorLoR_data = cell(nsubj,1);
+% xcorLoL_data = cell(nsubj,1);
+% xcorHiR_data = cell(nsubj,1);
+% for i = 1:nsubj
+%     fprintf(1,'#%d\n',i);
+%     xcorHiL_data{i} = load([filelistHiL(i).folder '\' filelistHiL(i).name]);
+%     xcorLoR_data{i} = load([filelistLoR(i).folder '\' filelistLoR(i).name]);
+%     xcorLoL_data{i} = load([filelistLoL(i).folder '\' filelistLoL(i).name]);
+%     xcorHiR_data{i} = load([filelistHiR(i).folder '\' filelistHiR(i).name]);
+% end
+% 
+% % split trials into 3 epochs (1=early, 2=middle and 3=late) and average
+% xcorHiL_data_split = cell(nsubj,3);
+% xcorLoR_data_split = cell(nsubj,3);
+% xcorLoL_data_split = cell(nsubj,3);
+% xcorHiR_data_split = cell(nsubj,3);
+% for i = 1:nsubj
+%     ntrialsHiL_LoR = size(xcorHiL_data{i}.xcorL,3);
+%     qsHiL_LoR = quantile(1:ntrialsHiL_LoR,[0, 1/3, 2/3, 1]);
+%     ntrialsLoL_HiR = size(xcorLoL_data{i}.xcorL,3);
+%     qsLoL_HiR = quantile(1:ntrialsLoL_HiR,[0, 1/3, 2/3, 1]);
+%     for j = 1:3
+%         t_idxHiL_LoR = [round(qsHiL_LoR(j)):round(qsHiL_LoR(j+1))-1];
+%         xcorHiL_data_split{i,j} = mean(xcorHiL_data{i}.xcorL(:,:,t_idxHiL_LoR),3);
+%         xcorLoR_data_split{i,j} = mean(xcorLoR_data{i}.xcorR(:,:,t_idxHiL_LoR),3);
+%         t_idxLoL_HiR = [round(qsLoL_HiR(j)):round(qsLoL_HiR(j+1))-1];
+%         xcorLoL_data_split{i,j} = mean(xcorLoL_data{i}.xcorL(:,:,t_idxLoL_HiR),3);
+%         xcorHiR_data_split{i,j} = mean(xcorHiR_data{i}.xcorR(:,:,t_idxLoL_HiR),3);
+%     end
+% end
+% % save('Q:\MEG_data\xcorHiL_split','xcorHiL_data_split');
+% % save('Q:\MEG_data\xcorLoR_split','xcorLoR_data_split');
+% % save('Q:\MEG_data\xcorLoL_split','xcorLoL_data_split');
+% % save('Q:\MEG_data\xcorHiR_split','xcorHiR_data_split');
+load('Q:\MEG_data\xcorHiL_split');
+load('Q:\MEG_data\xcorLoR_split');
+load('Q:\MEG_data\xcorLoL_split');
+load('Q:\MEG_data\xcorHiR_split');
+
+% compute hilbert transform
+xcorHiL_hilb = cell(nsubj,3);
+xcorLoR_hilb = cell(nsubj,3);
+xcorLoL_hilb = cell(nsubj,3);
+xcorHiR_hilb = cell(nsubj,3);
+for i = 1:nsubj
+    for j = 1:3
+        xcorHiL_hilb{i,j} = abs(hilbert(xcorHiL_data_split{i,j}'));
+        xcorLoR_hilb{i,j} = abs(hilbert(xcorLoR_data_split{i,j}'));
+        xcorLoL_hilb{i,j} = abs(hilbert(xcorLoL_data_split{i,j}'));
+        xcorHiR_hilb{i,j} = abs(hilbert(xcorHiR_data_split{i,j}'));
+    end
+end
+% pDelays = -200:1:200;
+% figure; subplot(221); plot(pDelays, xcorHiL_hilb{1,1}(:,:)); ylim([0 .2]); xlabel('lag'); ylabel('correlation'); hold on;
+% subplot(222); plot(pDelays, xcorLoR_hilb{1,1}(:,:)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+% subplot(223); plot(pDelays, xcorLoL_hilb{1,1}(:,:)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+% subplot(224); plot(pDelays, xcorHiR_hilb{1,1}(:,:)); ylim([0 .2]); xlabel('lag'); ylabel('correlation');
+
+% get peak value
+xcorHiL_peak = cell(nsubj,3);
+xcorLoR_peak = cell(nsubj,3);
+xcorLoL_peak = cell(nsubj,3);
+xcorHiR_peak = cell(nsubj,3);
+for i = 1:nsubj
+    for j = 1:3
+        xcorHiL_peak{i,j} = max(xcorHiL_hilb{i,j},[],1);
+        xcorLoR_peak{i,j} = max(xcorLoR_hilb{i,j},[],1);
+        xcorLoL_peak{i,j} = max(xcorLoL_hilb{i,j},[],1);
+        xcorHiR_peak{i,j} = max(xcorHiR_hilb{i,j},[],1);
+    end
+end
+% figure(1); figure(2);
+% for i = 1:nsubj
+%     for j = 1:3
+%         figure(1); subplot(1,3,j)
+%         plot(xcorHiL_peak{i,j}); ylim([0 .3]); xlim([1 204]); xlabel('channels'); ylabel('correlation'); hold on;
+%         plot(xcorLoR_peak{i,j}); ylim([0 .3]); xlim([1 204]); xlabel('channels'); ylabel('correlation');
+%         figure(2); subplot(1,3,j)
+%         plot(xcorLoL_peak{i,j}); ylim([0 .3]); xlim([1 204]); xlabel('channels'); ylabel('correlation'); hold on;
+%         plot(xcorHiR_peak{i,j}); ylim([0 .3]); xlim([1 204]); xlabel('channels'); ylabel('correlation');
+%     end
+% end
+
+% compute difference between stimuli
+xcorHLdiff = cell(nsubj,3);
+xcorLHdiff = cell(nsubj,3);
+for i = 1:nsubj
+    for j = 1:3
+        xcorHLdiff{i,j} = (xcorHiL_peak{i,j} - xcorLoR_peak{i,j});  % ./ (xcorHiL_peak(:,:,i) + xcorLoR_peak(:,:,i));
+        xcorLHdiff{i,j} = (xcorLoL_peak{i,j} - xcorHiR_peak{i,j});  % ./ (xcorLoL_peak(:,:,i) + xcorHiR_peak(:,:,i));
+    end
+end
+% figure;
+% for i = 1:nsubj
+%     for j = 1:3
+%         subplot(1,3,j)
+%         plot(xcorHLdiff{i,j}); ylim([-.3 .3]); xlim([1 204]); xlabel('channels'); ylabel('correlation'); hold on;
+%         plot(xcorLHdiff{i,j}); ylim([-.3 .3]); xlim([1 204]); xlabel('channels'); ylabel('correlation');
+%     end
+% end
+
+% select top sensors of each stimulus side (left/negative and right/positive)
+sens_nr = 3;
+xcorHLdiff_Rtop = cell(nsubj,3);
+xcorHLdiff_Ltop = cell(nsubj,3);
+% xcorHLdiff_sel = cell(nsubj,3);
+xcorLHdiff_Rtop = cell(nsubj,3);
+xcorLHdiff_Ltop = cell(nsubj,3);
+% xcorLHdiff_sel = cell(nsubj,3);
+for i = 1:nsubj
+    for j = 1:3
+        xcorHLdiff_Rtop{i,j} = mink(xcorHLdiff{i,j},sens_nr); 
+        xcorHLdiff_Ltop{i,j} = maxk(xcorHLdiff{i,j},sens_nr);
+%         xcorHLdiff_sel{i,j} = xcorHLdiff{i,j};
+%         xcorHLdiff_sel{i,j}(~ismember(xcorHLdiff_sel{i,j}, [xcorHLdiff_Ltop{i,j}, xcorHLdiff_Rtop{i,j}])) = 0;
+        xcorLHdiff_Rtop{i,j} = mink(xcorLHdiff{i,j},sens_nr); 
+        xcorLHdiff_Ltop{i,j} = maxk(xcorLHdiff{i,j},sens_nr);
+%         xcorLHdiff_sel{i,j} = xcorLHdiff{i,j};
+%         xcorLHdiff_sel{i,j}(~ismember(xcorLHdiff_sel{i,j}, [xcorLHdiff_Ltop{i,j}, xcorLHdiff_Rtop{i,j}])) = 0;
+    end
+end
+
+% average over sensors
+xcorHLdiff_Rtop_sbj = nan(nsubj,3);
+xcorHLdiff_Ltop_sbj = nan(nsubj,3);
+xcorLHdiff_Rtop_sbj = nan(nsubj,3);
+xcorLHdiff_Ltop_sbj = nan(nsubj,3);
+for j = 1:3
+    xcorHLdiff_Rtop_sbj(:,j) = mean(cell2mat(xcorHLdiff_Rtop(:,j)),2);
+    xcorHLdiff_Ltop_sbj(:,j) = mean(cell2mat(xcorHLdiff_Ltop(:,j)),2);
+    xcorLHdiff_Rtop_sbj(:,j) = mean(cell2mat(xcorLHdiff_Rtop(:,j)),2);
+    xcorLHdiff_Ltop_sbj(:,j) = mean(cell2mat(xcorLHdiff_Ltop(:,j)),2);
+end
+
+% compute difference
+xcorH_sbj = mean(cat(3,abs(xcorHLdiff_Ltop_sbj), abs(xcorLHdiff_Rtop_sbj)),3);
+xcorL_sbj = mean(cat(3,abs(xcorHLdiff_Rtop_sbj), abs(xcorLHdiff_Ltop_sbj)),3);
+
+% [~,p,~,stats] = ttest(xcorH_sbj, xcorL_sbj) %t-test
+% 
+% xcorH_mean = mean(xcorH_sbj,3);
+% xcorH_sem = std(xcorH_sbj,[],3) / sqrt(size(filelistHiL,1));
+% xcorL_mean = mean(xcorL_sbj,3);
+% xcorL_sem = std(xcorL_sbj,[],3) / sqrt(size(filelistHiL,1));
+
+% Plot as Fig. 4 of the paper [part 1]
+username = getenv('USERNAME');
+addpath(['C:\Users\' username '\OneDrive - University of Birmingham\UoB\Scripts\Violinplot'])
+% plot xcor by condition (hemi x probability)
+f1 = figure('Units', 'centimeters', 'Position', [5,5,8,8]);
+for j = 1:3
+    subplot(2,3,j)
+    xcorHLdiff_sbj = [squeeze(xcorHLdiff_Ltop_sbj(:,j)), squeeze(xcorLHdiff_Ltop_sbj(:,j)),...
+        squeeze(-xcorLHdiff_Rtop_sbj(:,j)), squeeze(-xcorHLdiff_Rtop_sbj(:,j))];
+    vp = violinplot(xcorHLdiff_sbj, [], 'ShowMean', true);
+    xlim([0.5,4.5]); xlabel('Distractor probability'); xticklabels({'high', 'low', 'high', 'low'});
+    ylabel('Frequency tagging response');
+    legend('left','right','FontSize',6); legend boxoff
+    ax = gca;
+    ax.FontSize = 6;
+    % set colours
+    vp(1, 1).ViolinColor = [0.3010    0.7450    0.9330];
+    vp(1, 2).ViolinColor = [0.3010    0.7450    0.9330];
+    vp(1, 3).ViolinColor = [0.8500    0.3250    0.0980];
+    vp(1, 4).ViolinColor = [0.8500    0.3250    0.0980];
+    % plot line between each subject data point
+    x1 = vp(1,1).ScatterPlot.XData;
+    y1 = vp(1,1).ScatterPlot.YData;
+    x2 = vp(1,2).ScatterPlot.XData;
+    y2 = vp(1,2).ScatterPlot.YData;
+    plot([x1; x2],[y1; y2],'Color',[.8 .8 .8],'linewidth',0.5)
+    x3 = vp(1,3).ScatterPlot.XData;
+    y3 = vp(1,3).ScatterPlot.YData;
+    x4 = vp(1,4).ScatterPlot.XData;
+    y4 = vp(1,4).ScatterPlot.YData;
+    plot([x3; x4],[y3; y4],'Color',[.8 .8 .8],'linewidth',0.5)
+    % add legend
+    hleglines = [vp(1, 1).ViolinPlot, vp(1, 3).ViolinPlot];
+    legend(hleglines, {'Session 1', 'Session 2'},'Location','northeast')
+    legend('boxoff')
+end
+
+% Plot for Fig. 4 of the paper [part 2]
+% plot xcor probability effect (across hemi)
+figure(f1)
+for j = 1:3
+    subplot(2,3,j+3)
+    xcor_sbj = squeeze(xcorL_sbj(:,j)) - squeeze(xcorH_sbj(:,j));
+    violinplot(xcor_sbj, [], 'ShowMean', true); hold on
+    ylim([-.02,.03]); yline(0, '--'); hold off
+    xlim([0.5,1.5]); xticklabels('low-high');
+    ylabel('SL effect (norm corr)');
+    ax = gca;
+    ax.FontSize = 6;
+end
+
+
+
