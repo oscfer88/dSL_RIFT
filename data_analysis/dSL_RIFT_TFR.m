@@ -77,15 +77,15 @@ dataset{1,2} = 'B3F2_S1P2.fif';
 %sbj9_session2
 cd('Q:/MEG_data/20190920_b3f2/190920/');
 dataset{1,1} = 'B3F2_S2P1.fif';
-dataset{1,2} = 'B3F2_S2P1.fif';
+dataset{1,2} = 'B3F2_S2P2.fif';
 %sbj10_session1
 cd('Q:/MEG_data/20190916_b57f/190916/');
 dataset{1,1} = 'B57F_S1P1.fif';
-dataset{1,2} = 'B57F_S1P1.fif';
+dataset{1,2} = 'B57F_S1P2.fif';
 %sbj10_session2
 cd('Q:/MEG_data/20190920_b57f/190920/');
 dataset{1,1} = 'B57F_S2P1.fif';
-dataset{1,2} = 'B57F_S2P1.fif';
+dataset{1,2} = 'B57F_S2P2.fif';
 %sbj11_session1
 cd('Q:/MEG_data/20191014_b3f3/191014/');
 dataset{1,1} = 'B3F3_S1P1.fif';
