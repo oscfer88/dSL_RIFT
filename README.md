@@ -2,7 +2,7 @@
 This repository contains the experimental code used to run the experiment, all the scripts used to analyse the data, and the questionnaire used to assess participants' awareness of the statistical learning manipulation.
 <br /><br />
 
-### **A preprint of the study can be found [here!](https://www.biorxiv.org/content/10.1101/2022.09.07.506943v1.abstract)**
+### **The study is pubblished on Jornal of Neuroscience. Link [here!](https://doi.org/10.1523/JNEUROSCI.1703-22.2022)**
 <br />
 
 ## Abstract:
