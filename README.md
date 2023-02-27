@@ -1,4 +1,4 @@
-# Statistical Learning of Distractor Suppression Regulates Pre-Stimulus Neural Excitability in Early Visual Cortex
+# Statistical Learning of Distractor Suppression Down-regulates Pre-Stimulus Neural Excitability in Early Visual Cortex
 This repository contains the experimental code used to run the experiment, all the scripts used to analyse the data, and the questionnaire used to assess participants' awareness of the statistical learning manipulation.
 <br /><br />
 
